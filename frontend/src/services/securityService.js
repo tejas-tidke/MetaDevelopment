@@ -2,8 +2,7 @@
 // Utility functions for handling sensitive data securely
 
 // Simple encryption/decryption for client-side storage
-// Note: This is not a replacement for server-side security but adds an extra layer
-const SECRET_KEY = "htc_meta_project_secret_key_2025"; // In a real app, this should be more secure
+const SECRET_KEY = "htc_meta_project_secret_key_2025";
 
 // Encrypt data before storing
 export const encryptData = (data) => {

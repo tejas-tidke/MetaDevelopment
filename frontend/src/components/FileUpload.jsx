@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useAuthProtection } from '../hooks/useAuthProtection';
 
 function FileUpload() {
+  const navigate = useNavigate();
+  
+  // Protect this component from unauthorized access
+  useAuthProtection();
+
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const navigate = useNavigate();
 
   const ALLOWED_FILE_TYPES = [
     'text/csv',

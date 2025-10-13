@@ -19,24 +19,27 @@ function App() {
     initAuthListener();
     
     // Handle browser navigation events
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        // When the tab becomes visible, check auth state
-        onAuthStateChanged(auth, (user) => {
-          if (!user && window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
-            // If user is not authenticated and not on login/signup page, redirect to login
-            window.location.href = '/login';
-          }
-        });
-      }
+    const handlePopState = () => {
+      // Check authentication state when user navigates with browser buttons
+      onAuthStateChanged(auth, (user) => {
+        const isAuthenticated = !!user;
+        const currentPath = window.location.pathname;
+        const isProtectedRoute = !['/login', '/signup', '/'].includes(currentPath);
+        
+        // If user is not authenticated and trying to access a protected route
+        if (!isAuthenticated && isProtectedRoute) {
+          // Redirect to login and replace history to prevent back navigation
+          window.location.replace('/login');
+        }
+      });
     };
     
-    // Add event listener for visibility change
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // Add event listener for browser navigation (back/forward buttons)
+    window.addEventListener('popstate', handlePopState);
     
     // Cleanup event listener
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('popstate', handlePopState);
     };
   }, []);
 

@@ -175,6 +175,37 @@ export const initAuthListener = () => {
     } else {
       // User is signed out
       clearUserData();
+      // Redirect to login if on a protected page
+      const currentPath = window.location.pathname;
+      const isProtectedRoute = !['/login', '/signup', '/'].includes(currentPath);
+      if (isProtectedRoute) {
+        window.location.replace('/login');
+      }
     }
+  });
+};
+
+// Force authentication check
+export const forceAuthCheck = () => {
+  return new Promise((resolve) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe(); // Unsubscribe immediately after getting the result
+      resolve(!!user);
+    });
+  });
+};
+
+// Check authentication and redirect if needed
+export const checkAuthAndRedirect = () => {
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const isAuthenticated = !!user;
+    const currentPath = window.location.pathname;
+    const isProtectedRoute = !['/login', '/signup', '/'].includes(currentPath);
+    
+    if (!isAuthenticated && isProtectedRoute) {
+      window.location.replace('/login');
+    }
+    
+    unsubscribe();
   });
 };

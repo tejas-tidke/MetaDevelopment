@@ -1,8 +1,15 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import axios from 'axios';
+import { useAuthProtection } from '../hooks/useAuthProtection';
 
 function UploadedDataSelect() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Protect this component from unauthorized access
+  useAuthProtection();
+
   const [userDetails, setUserDetails] = useState([]);
   const [filteredDetails, setFilteredDetails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -10,8 +17,6 @@ function UploadedDataSelect() {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [selectedUsers, setSelectedUsers] = useState(new Set());
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const fetchUploadedData = async () => {

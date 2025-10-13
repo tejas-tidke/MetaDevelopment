@@ -1,16 +1,21 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { getCurrentUser } from "../services/authService";
-import SensitiveActionModal from "./SensitiveActionModal";
-import LogoutButton from "./LogoutButton";
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { auth } from '../firebase';
+import { useAuthProtection } from '../hooks/useAuthProtection';
+import SensitiveActionModal from './SensitiveActionModal';
+import LogoutButton from './LogoutButton';
 
 function UserProfile() {
+  const navigate = useNavigate();
+  
+  // Protect this component from unauthorized access
+  useAuthProtection();
+
   const [showModal, setShowModal] = useState(false);
   const [modalAction, setModalAction] = useState("");
   const [message, setMessage] = useState("");
-  const navigate = useNavigate();
   
-  const user = getCurrentUser();
+  const user = auth.currentUser;
   
   const handleSensitiveAction = (actionType) => {
     setModalAction(actionType);

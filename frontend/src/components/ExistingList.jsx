@@ -1,8 +1,14 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
+import { useAuthProtection } from '../hooks/useAuthProtection';
 
 function ExistingList() {
+  const navigate = useNavigate();
+  
+  // Protect this component from unauthorized access
+  useAuthProtection();
+
   const [userDetails, setUserDetails] = useState([]);
   const [filteredDetails, setFilteredDetails] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -13,14 +19,12 @@ function ExistingList() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const fetchUserDetails = async () => {
       try {
         setLoading(prev => ({ ...prev, users: true }));
-        const response = await axios.get("http://localhost:8080/api/user-details");
+        const response = await api.get("user-details");
         if (response.data.status === "success") {
           setUserDetails(response.data.data || []);
           setFilteredDetails(response.data.data || []);
@@ -38,7 +42,7 @@ function ExistingList() {
     const fetchUploadedFiles = async () => {
       try {
         setLoading(prev => ({ ...prev, files: true }));
-        const response = await axios.get("http://localhost:8080/api/files");
+        const response = await api.get("files");
         setUploadedFiles(response.data || []);
       } catch (err) {
         setError(prev => ({ ...prev, files: "Error fetching uploaded files" }));
@@ -51,13 +55,7 @@ function ExistingList() {
     // Fetch data when component mounts or when refresh is requested
     fetchUserDetails();
     fetchUploadedFiles();
-    
-    // If we came from file upload, show a success message
-    if (location.state?.uploadSuccess) {
-      // Reset the location state after handling
-      window.history.replaceState({}, document.title);
-    }
-  }, [location.state?.refresh]);
+  }, []);
 
   // Filter data based on search term
   useEffect(() => {
@@ -137,7 +135,7 @@ function ExistingList() {
 
     try {
       setIsDeleting(true);
-      await axios.post("http://localhost:8080/api/user-details/delete", idsToDelete);
+      await api.post("user-details/delete", idsToDelete);
       const idSet = new Set(idsToDelete);
       setUserDetails(prev => prev.filter(u => !idSet.has(u.id)));
       setFilteredDetails(prev => prev.filter(u => !idSet.has(u.id)));

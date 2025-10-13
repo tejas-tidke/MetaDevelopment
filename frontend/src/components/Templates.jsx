@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import api from "../services/api";
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuthProtection } from '../hooks/useAuthProtection';
+import api from '../services/api';
 
 function Templates() {
   const navigate = useNavigate();
   const location = useLocation();
+  
+  // Protect this component from unauthorized access
+  useAuthProtection();
+
   const selected = location.state?.selected || [];
   const [templates, setTemplates] = useState([]);
   const [tplLoading, setTplLoading] = useState(true);

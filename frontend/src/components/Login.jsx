@@ -2,8 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, OAuthProvider, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../firebase"; // ✅ Import Firebase Auth
-import { saveUserData, isAuthenticated } from "../services/authService"; // ✅ Import auth service
+import { saveUserData } from "../services/authService"; // ✅ Import auth service
 import Captcha from "./Captcha"; // ✅ Import reCAPTCHA component
+import { useRedirectIfAuthenticated } from "../hooks/useAuthProtection";
 
 function Login() {
   const [username, setUsername] = useState(""); // Firebase uses email as username
@@ -19,13 +20,7 @@ function Login() {
   const location = useLocation();
 
   // Redirect authenticated users away from login page
-  useEffect(() => {
-    // Check if user is already authenticated
-    if (isAuthenticated() && auth.currentUser) {
-      // If user is already logged in, redirect to welcome page
-      navigate("/welcome", { replace: true });
-    }
-  }, [navigate]);
+  useRedirectIfAuthenticated();
 
   // Check for redirect message from signup
   useEffect(() => {
@@ -147,7 +142,7 @@ function Login() {
       if (error.code === "auth/popup-closed-by-user") errorMsg = "Sign-in popup was closed.";
       if (error.code === "auth/cancelled-popup-request") errorMsg = "Sign-in was cancelled.";
       if (error.code === "auth/account-exists-with-different-credential") {
-        errorMsg = "An account already exists with this email. Please sign in using your original authentication method.";
+        errorMsg = "An account already exists with this email. Please sign in !!.";
       }
       setMessage(errorMsg);
     } finally {
