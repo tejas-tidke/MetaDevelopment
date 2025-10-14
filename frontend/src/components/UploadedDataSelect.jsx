@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import { useAuthProtection } from '../hooks/useAuthProtection';
 
 function UploadedDataSelect() {
@@ -16,10 +16,11 @@ function UploadedDataSelect() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
-  const [selectedUsers, setSelectedUsers] = useState(new Set());
 
   useEffect(() => {
     const fetchUploadedData = async () => {
+      console.log("Location state in UploadedDataSelect:", location.state);
+      
       if (!location.state?.fileId) {
         setError("No file information found");
         setLoading(false);
@@ -28,14 +29,24 @@ function UploadedDataSelect() {
 
       try {
         setLoading(true);
-        const response = await axios.get(
-          `http://localhost:8080/api/files/${location.state.fileId}/user-details`
-        );
-        setUserDetails(response.data || []);
-        setFilteredDetails(response.data || []);
+        console.log(`Fetching user details for file ID: ${location.state.fileId}`);
+        
+        // Use the api service instead of direct axios call
+        const response = await api.get(`/files/${location.state.fileId}/user-details`);
+        console.log("API Response in UploadedDataSelect:", response);
+        
+        // Ensure we're working with arrays
+        const userData = Array.isArray(response.data.data) ? response.data.data : [];
+        console.log("User data received in UploadedDataSelect:", userData);
+        
+        setUserDetails(userData);
+        setFilteredDetails(userData);
       } catch (err) {
-        setError("Error fetching uploaded data");
-        console.error("Error fetching uploaded data:", err);
+        console.error("Error fetching uploaded data in UploadedDataSelect:", err);
+        setError("Error fetching uploaded data: " + (err.response?.data?.message || err.message));
+        // Set empty arrays on error to prevent map errors
+        setUserDetails([]);
+        setFilteredDetails([]);
       } finally {
         setLoading(false);
       }
@@ -44,19 +55,22 @@ function UploadedDataSelect() {
     fetchUploadedData();
   }, [location.state?.fileId]);
 
+  // Filter data based on search term
   useEffect(() => {
     if (!searchTerm) {
       setFilteredDetails(userDetails);
       return;
     }
-    const filtered = userDetails.filter((user) =>
-      Object.values(user).some(
-        (val) => val && val.toString().toLowerCase().includes(searchTerm.toLowerCase())
+
+    const filtered = userDetails.filter(user => 
+      Object.values(user).some(val => 
+        val && val.toString().toLowerCase().includes(searchTerm.toLowerCase())
       )
     );
     setFilteredDetails(filtered);
   }, [searchTerm, userDetails]);
 
+  // Sort data
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") {
@@ -85,11 +99,7 @@ function UploadedDataSelect() {
       <div className="flex">
         <div className="flex-shrink-0">
           <svg className="h-4 w-4 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-              clipRule="evenodd"
-            />
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
           </svg>
         </div>
         <div className="ml-2">
@@ -104,47 +114,6 @@ function UploadedDataSelect() {
       return sortConfig.direction === "asc" ? "↑" : "↓";
     }
     return "↕";
-  };
-
-  // Selection helpers
-  const getUserKey = (user, index) =>
-    user.id ?? `${user.email ?? ""}-${user.phoneNo ?? ""}-${index}`;
-  const allVisibleSelected =
-    filteredDetails.length > 0 &&
-    filteredDetails.every((u, i) => selectedUsers.has(getUserKey(u, i)));
-  const toggleSelectAll = () => {
-    const next = new Set(selectedUsers);
-    if (allVisibleSelected) {
-      filteredDetails.forEach((u, i) => next.delete(getUserKey(u, i)));
-    } else {
-      filteredDetails.forEach((u, i) => next.add(getUserKey(u, i)));
-    }
-    setSelectedUsers(next);
-  };
-  const toggleOne = (user, index) => {
-    const key = getUserKey(user, index);
-    const next = new Set(selectedUsers);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    setSelectedUsers(next);
-  };
-  const selectedCount = filteredDetails.reduce(
-    (acc, u, i) => acc + (selectedUsers.has(getUserKey(u, i)) ? 1 : 0),
-    0
-  );
-
-  const handleContinue = () => {
-    const selected = filteredDetails
-      .map((u, i) => ({ u, i }))
-      .filter(({ u, i }) => selectedUsers.has(getUserKey(u, i)))
-      .map(({ u }) => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        phoneNo: u.phoneNo,
-        companyName: u.companyName,
-      }));
-    navigate("/templates", { state: { selected } });
   };
 
   return (
@@ -203,12 +172,59 @@ function UploadedDataSelect() {
           </div>
         )}
 
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="bg-blue-100 p-2 rounded-md mr-3">
+                <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Total Records</p>
+                <p className="text-lg font-bold text-gray-900">{userDetails.length}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="bg-green-100 p-2 rounded-md mr-3">
+                <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Processed</p>
+                <p className="text-lg font-bold text-gray-900">{location.state?.processedRecords || 0}</p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center">
+              <div className="bg-amber-100 p-2 rounded-md mr-3">
+                <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Errors</p>
+                <p className="text-lg font-bold text-gray-900">{location.state?.errorRecords || 0}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Data Table */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Uploaded User Details</h2>
-              <p className="mt-1 text-xs text-gray-500">Showing only the data from your recently uploaded file</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Showing only the data from your recently uploaded file
+              </p>
             </div>
             <div className="relative w-full md:w-52">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
@@ -225,7 +241,7 @@ function UploadedDataSelect() {
               />
             </div>
           </div>
-
+          
           {loading ? (
             renderLoading()
           ) : error ? (
@@ -241,116 +257,100 @@ function UploadedDataSelect() {
               </p>
             </div>
           ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-5 py-2.5 text-left">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          checked={allVisibleSelected}
-                          onChange={toggleSelectAll}
-                          aria-label="Select all visible records"
-                        />
-                      </th>
-                      <th
-                        className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('name')}
-                      >
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th 
+                      className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center">
+                        Name
+                        <span className="ml-1">{getSortIcon('name')}</span>
+                      </div>
+                    </th>
+                    <th 
+                      className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('email')}
+                    >
+                      <div className="flex items-center">
+                        Email
+                        <span className="ml-1">{getSortIcon('email')}</span>
+                      </div>
+                    </th>
+                    <th 
+                      className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('phoneNo')}
+                    >
+                      <div className="flex items-center">
+                        Phone
+                        <span className="ml-1">{getSortIcon('phoneNo')}</span>
+                      </div>
+                    </th>
+                    <th 
+                      className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('companyName')}
+                    >
+                      <div className="flex items-center">
+                        Company
+                        <span className="ml-1">{getSortIcon('companyName')}</span>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredDetails.map((user, index) => (
+                    <tr key={user.id || index} className="hover:bg-gray-50">
+                      <td className="px-5 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          Name
-                          <span className="ml-1">{getSortIcon('name')}</span>
-                        </div>
-                      </th>
-                      <th
-                        className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('email')}
-                      >
-                        <div className="flex items-center">
-                          Email
-                          <span className="ml-1">{getSortIcon('email')}</span>
-                        </div>
-                      </th>
-                      <th
-                        className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('phoneNo')}
-                      >
-                        <div className="flex items-center">
-                          Phone
-                          <span className="ml-1">{getSortIcon('phoneNo')}</span>
-                        </div>
-                      </th>
-                      <th
-                        className="px-5 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
-                        onClick={() => handleSort('companyName')}
-                      >
-                        <div className="flex items-center">
-                          Company
-                          <span className="ml-1">{getSortIcon('companyName')}</span>
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredDetails.map((user, index) => (
-                      <tr key={user.id || index} className="hover:bg-gray-50">
-                        <td className="px-5 py-3">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            checked={selectedUsers.has(getUserKey(user, index))}
-                            onChange={() => toggleOne(user, index)}
-                            aria-label={`Select ${user.name || 'record'}`}
-                          />
-                        </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-7 w-7 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-blue-800 text-xs font-medium">
-                                {user.name ? user.name.charAt(0).toUpperCase() : '?'}
-                              </span>
-                            </div>
-                            <div className="ml-2.5">
-                              <div className="text-sm font-medium text-gray-900">{user.name || '-'}</div>
-                            </div>
+                          <div className="flex-shrink-0 h-7 w-7 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-800 text-xs font-medium">
+                              {user.name ? user.name.charAt(0).toUpperCase() : '?'}
+                            </span>
                           </div>
-                        </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{user.email || '-'}</div>
-                        </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{user.phoneNo || '-'}</div>
-                        </td>
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{user.companyName || '-'}</div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="bg-gray-50 px-5 py-3 border-t border-gray-200 flex items-center justify-between">
-                <p className="text-xs text-gray-700">
-                  Showing <span className="font-medium">{filteredDetails.length}</span> of{' '}
-                  <span className="font-medium">{userDetails.length}</span> records
-                </p>
-                <button
-                  type="button"
-                  onClick={handleContinue}
-                  disabled={selectedCount === 0}
-                  className={`px-4 py-2 rounded-md text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                    selectedCount === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  Continue{selectedCount > 0 ? ` (${selectedCount})` : ''}
-                </button>
-              </div>
-            </>
+                          <div className="ml-2.5">
+                            <div className="text-sm font-medium text-gray-900">{user.name || '-'}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{user.email || '-'}</div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{user.phoneNo || '-'}</div>
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{user.companyName || '-'}</div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          
+          {!loading && !error && filteredDetails.length > 0 && (
+            <div className="bg-gray-50 px-5 py-3 border-t border-gray-200">
+              <p className="text-xs text-gray-700">
+                Showing <span className="font-medium">{filteredDetails.length}</span> of{' '}
+                <span className="font-medium">{userDetails.length}</span> records
+              </p>
+            </div>
           )}
         </div>
+        
+        {/* Continue Button */}
+        {location.state?.fileId && filteredDetails.length > 0 && (
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => navigate('/templates', { state: { fileId: location.state.fileId } })}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-md font-medium hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Continue to Templates
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

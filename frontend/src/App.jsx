@@ -7,6 +7,8 @@ import Templates from './components/Templates';
 import ExistingList from './components/ExistingList';
 import FileUpload from './components/FileUpload';
 import UserProfile from './components/UserProfile';
+import UploadedData from './components/UploadedData';
+import UploadedDataSelect from './components/UploadedDataSelect';
 import ProtectedRoute from './components/ProtectedRoute';
 import { initAuthListener } from './services/authService';
 import { auth } from './firebase';
@@ -74,6 +76,16 @@ function App() {
             <Route path="/profile" element={
               <ProtectedRoute>
                 <UserProfile />
+              </ProtectedRoute>
+            } />
+            <Route path="/uploaded-data" element={
+              <ProtectedRoute>
+                <UploadedData />
+              </ProtectedRoute>
+            } />
+            <Route path="/uploaded-data-select" element={
+              <ProtectedRoute>
+                <UploadedDataSelect />
               </ProtectedRoute>
             } />
           </Routes>

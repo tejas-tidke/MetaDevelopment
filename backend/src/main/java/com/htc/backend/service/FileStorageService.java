@@ -141,9 +141,11 @@ public class FileStorageService {
             // Save all valid records in a batch
             if (!userDetailsList.isEmpty()) {
                 try {
+                    System.out.println("Saving " + userDetailsList.size() + " user details with uploadedFileId: " + uploadedFile.getId());
                     userDetailsRepository.saveAll(userDetailsList);
                     uploadedFile.setProcessedRecords(processedCount);
                     uploadedFile.setErrorRecords(errorCount);
+                    System.out.println("Successfully saved user details");
                 } catch (DataIntegrityViolationException e) {
                     throw new IllegalArgumentException("Duplicate email found in the file. Please ensure all emails are unique.", e);
                 }
@@ -212,9 +214,11 @@ public class FileStorageService {
             // Save all valid records in a batch
             if (!userDetailsList.isEmpty()) {
                 try {
+                    System.out.println("Saving " + userDetailsList.size() + " user details with uploadedFileId: " + uploadedFile.getId());
                     userDetailsRepository.saveAll(userDetailsList);
                     uploadedFile.setProcessedRecords(processedCount);
                     uploadedFile.setErrorRecords(errorCount);
+                    System.out.println("Successfully saved user details");
                 } catch (DataIntegrityViolationException e) {
                     throw new IllegalArgumentException("Duplicate email found in the file. Please ensure all emails are unique.", e);
                 }
@@ -285,7 +289,10 @@ public class FileStorageService {
     
     // New method to get user details from a specific uploaded file
     public List<UserDetails> getUserDetailsByUploadedFileId(Long uploadedFileId) {
-        return userDetailsRepository.findByUploadedFileId(uploadedFileId);
+        System.out.println("Querying user details for uploadedFileId: " + uploadedFileId);
+        List<UserDetails> result = userDetailsRepository.findByUploadedFileId(uploadedFileId);
+        System.out.println("Found " + result.size() + " user details for uploadedFileId: " + uploadedFileId);
+        return result;
     }
     
     // New method to save an uploaded file without processing

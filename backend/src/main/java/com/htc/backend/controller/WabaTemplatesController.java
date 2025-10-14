@@ -13,7 +13,6 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/waba")
-@CrossOrigin(origins = "http://localhost:5173")
 public class WabaTemplatesController {
 
     @Value("${waba.id:}")
@@ -24,6 +23,13 @@ public class WabaTemplatesController {
     
     @Value("${waba.phone-number-id:}")
     private String phoneNumberId;
+
+    private final RestTemplate restTemplate;
+
+    // Constructor injection for RestTemplate
+    public WabaTemplatesController(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     @GetMapping("/templates")
     public Map<String, Object> getTemplates() {
@@ -43,7 +49,7 @@ public class WabaTemplatesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-            RestTemplate restTemplate = new RestTemplate();
+            // Use the injected RestTemplate with configured timeouts instead of creating a new one
             ResponseEntity<String> result = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
 
             ObjectMapper mapper = new ObjectMapper();

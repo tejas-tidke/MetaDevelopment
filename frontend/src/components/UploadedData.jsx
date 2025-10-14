@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import { useAuthProtection } from '../hooks/useAuthProtection';
 
 function UploadedData() {
@@ -18,6 +18,8 @@ function UploadedData() {
 
   useEffect(() => {
     const fetchUploadedData = async () => {
+      console.log("Location state:", location.state);
+      
       if (!location.state?.fileId) {
         setError("No file information found");
         setLoading(false);
@@ -26,12 +28,24 @@ function UploadedData() {
 
       try {
         setLoading(true);
-        const response = await axios.get(`http://localhost:8080/api/files/${location.state.fileId}/user-details`);
-        setUserDetails(response.data || []);
-        setFilteredDetails(response.data || []);
+        console.log(`Fetching user details for file ID: ${location.state.fileId}`);
+        
+        // Use the api service instead of direct axios call
+        const response = await api.get(`/files/${location.state.fileId}/user-details`);
+        console.log("API Response:", response);
+        
+        // Ensure we're working with arrays
+        const userData = Array.isArray(response.data.data) ? response.data.data : [];
+        console.log("User data received:", userData);
+        
+        setUserDetails(userData);
+        setFilteredDetails(userData);
       } catch (err) {
-        setError("Error fetching uploaded data");
         console.error("Error fetching uploaded data:", err);
+        setError("Error fetching uploaded data: " + (err.response?.data?.message || err.message));
+        // Set empty arrays on error to prevent map errors
+        setUserDetails([]);
+        setFilteredDetails([]);
       } finally {
         setLoading(false);
       }
@@ -324,6 +338,18 @@ function UploadedData() {
             </div>
           )}
         </div>
+      
+        {/* Continue Button */}
+        {location.state?.fileId && filteredDetails.length > 0 && (
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => navigate('/templates', { state: { fileId: location.state.fileId } })}
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-md font-medium hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Continue to Templates
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

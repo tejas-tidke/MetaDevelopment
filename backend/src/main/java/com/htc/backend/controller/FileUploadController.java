@@ -25,7 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173")
 public class FileUploadController {
 
     private static final Logger log = LoggerFactory.getLogger(FileUploadController.class);
@@ -85,6 +84,7 @@ public class FileUploadController {
             
             // Process the file and save to database
             UploadedFile uploadedFile = fileStorageService.processFile(file);
+            log.info("File processed successfully. Uploaded file ID: {}", uploadedFile.getId());
             
             // Prepare response
             Map<String, Object> response = new HashMap<>();
@@ -167,6 +167,7 @@ public class FileUploadController {
         log.info("getAllFiles endpoint called");
         try {
             List<UploadedFile> files = fileStorageService.getAllUploadedFiles();
+            log.info("Retrieved {} uploaded files", files.size());
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("data", files);
@@ -185,6 +186,9 @@ public class FileUploadController {
         log.info("getUserDetailsByFileId endpoint called with fileId: {}", fileId);
         try {
             List<UserDetails> userDetails = fileStorageService.getUserDetailsByUploadedFileId(fileId);
+            log.info("Found {} user details for file ID: {}", userDetails.size(), fileId);
+            log.debug("User details: {}", userDetails);
+            
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("data", userDetails);

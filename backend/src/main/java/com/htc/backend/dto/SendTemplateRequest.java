@@ -38,6 +38,10 @@ public class SendTemplateRequest {
     @JsonIgnore
     public String headerMediaFilename;
     
+    // Default constructor required for JSON deserialization
+    public SendTemplateRequest() {
+    }
+    
     public String getParameterAsString(int index) {
         if (parameters == null || index >= parameters.size()) {
             return "";

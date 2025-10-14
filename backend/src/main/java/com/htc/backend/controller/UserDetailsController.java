@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173")
 public class UserDetailsController {
 
     private static final Logger log = LoggerFactory.getLogger(UserDetailsController.class);

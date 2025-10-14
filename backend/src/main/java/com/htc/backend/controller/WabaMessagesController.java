@@ -12,6 +12,7 @@ import org.springframework.core.ParameterizedTypeReference;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/waba")
@@ -30,8 +31,9 @@ public class WabaMessagesController {
     private final RestTemplate restTemplate;
     private final UserDetailsRepository userDetailsRepository;
 
-    public WabaMessagesController(UserDetailsRepository userDetailsRepository) {
-        this.restTemplate = new RestTemplate();
+    // Constructor injection for both RestTemplate and UserDetailsRepository
+    public WabaMessagesController(UserDetailsRepository userDetailsRepository, RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
         this.userDetailsRepository = userDetailsRepository;
     }
 
@@ -42,6 +44,15 @@ public class WabaMessagesController {
         System.out.println("Request details: " + req); // Log the full request
         System.out.println("Parameters: " + req.parameters); // Log parameters specifically
         System.out.println("Personalize with user data: " + req.personalizeWithUserData); // Log personalization flag
+        
+        // Log the number of recipients
+        int totalRecipients = req.to != null ? req.to.size() : 0;
+        System.out.println("Total recipients: " + totalRecipients);
+        
+        if (totalRecipients > 500) {
+            System.out.println("WARNING: Large batch detected (" + totalRecipients + " recipients). This may take a while.");
+        }
+        
         if (phoneNumberId == null || phoneNumberId.isBlank() || accessToken == null || accessToken.isBlank()) {
             resp.put("status", "error");
             resp.put("message", "WABA configuration missing. Set 'waba.phone-number-id' and 'waba.access-token'.");
@@ -63,14 +74,20 @@ public class WabaMessagesController {
                 .stream().filter(Objects::nonNull)
                 .map(String::trim).filter(s -> !s.isBlank())
                 .map(this::normalizePhoneNumber) // Normalize phone numbers
-                .distinct().collect(Collectors.toList());
+                .collect(Collectors.toList());
         if (recipients.isEmpty()) {
             resp.put("status", "error");
             resp.put("message", "No recipients provided.");
             return resp;
         }
         
-        System.out.println("Normalized recipients: " + recipients);
+        System.out.println("Normalized recipients (including duplicates): " + recipients);
+
+        // For very large batches (over 1000), process in smaller chunks to avoid memory issues
+        if (recipients.size() > 1000) {
+            System.out.println("Processing large batch in chunks to manage memory usage...");
+            return processLargeBatchInChunks(req, recipients);
+        }
 
         String url = String.format("https://graph.facebook.com/v19.0/%s/messages", phoneNumberId);
         System.out.println("WhatsApp API URL: " + url); // Log the URL for debugging
@@ -83,8 +100,54 @@ public class WabaMessagesController {
 
         int sent = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
-        for (String to : recipients) {
-            System.out.println("Processing recipient: " + to);
+        
+        // For large batches, log progress at regular intervals
+        int progressInterval = Math.max(10, recipients.size() / 10); // Log every 10% or every 10 recipients
+        
+        // Keep track of the last recipient to implement longer delays for consecutive messages to same number
+        String lastRecipient = null;
+        
+        for (int i = 0; i < recipients.size(); i++) {
+            String to = recipients.get(i);
+            
+            // Log progress for large batches
+            if (recipients.size() > 100 && (i + 1) % progressInterval == 0) {
+                System.out.println("Progress: " + (i + 1) + "/" + recipients.size() + " recipients processed (" + 
+                    String.format("%.1f", (double)(i + 1) / recipients.size() * 100) + "%)");
+            }
+            
+            System.out.println("Processing recipient " + (i+1) + "/" + recipients.size() + ": " + to);
+            
+            // Add a delay between messages to avoid rate limiting
+            // Using minimum safe delays to optimize sending speed while avoiding rate limits
+            if (i > 0) {
+                try {
+                    long delayMs = 1000; // Minimum safe delay: 1 second for different recipients
+                    
+                    // If sending to the same number as the last message, use a longer delay
+                    // This is specifically for consecutive messages to the same phone number
+                    // WhatsApp rate limits are per "Business Account, Consumer Account" pair
+                    if (to.equals(lastRecipient)) {
+                        delayMs = 2000; // 2 seconds for consecutive messages to same number (as requested)
+                        System.out.println("Consecutive message to same recipient (" + to + "). Using 2-second delay to avoid rate limiting...");
+                    } else {
+                        System.out.println("Different recipient. Waiting 1 second before sending next message...");
+                    }
+                    
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.err.println("Interrupted while waiting: " + e.getMessage());
+                    Map<String, Object> error = new HashMap<>();
+                    error.put("to", to);
+                    error.put("error", "Process interrupted: " + e.getMessage());
+                    errors.add(error);
+                    break;
+                }
+            }
+            
+            lastRecipient = to; // Update the last recipient
+            
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("messaging_product", "whatsapp");
             payload.put("to", to);
@@ -255,7 +318,7 @@ public class WabaMessagesController {
                 System.out.println("Phone number for lookup: " + to);
                 
                 // Try to find user by phone number
-                Optional<UserDetails> userDetailsOpt = userDetailsRepository.findByPhoneNo(to);
+                Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(to);
                 if (userDetailsOpt.isPresent()) {
                     UserDetails userDetails = userDetailsOpt.get();
                     System.out.println("Found user for personalization: " + userDetails.getName());
@@ -407,7 +470,7 @@ public class WabaMessagesController {
             }
         }
 
-        // Prepare response
+        // Prepare response with enhanced information for large batches
         Map<String, Object> result = new HashMap<>();
         result.put("status", errors.isEmpty() ? "success" : (sent > 0 ? "partial_success" : "error"));
         
@@ -421,9 +484,37 @@ public class WabaMessagesController {
         
         result.put("sent", sent);
         result.put("failed", recipients.size() - sent);
-        if (!errors.isEmpty()) {
-            result.put("errors", errors);
+        result.put("total", recipients.size());
+        
+        // For large batches, include additional statistics
+        if (recipients.size() > 100) {
+            result.put("batchSize", recipients.size());
+            result.put("successRate", String.format("%.2f%%", (double) sent / recipients.size() * 100));
         }
+        
+        if (!errors.isEmpty()) {
+            // For large batches, limit the number of detailed errors to prevent response bloat
+            if (recipients.size() > 100 && errors.size() > 50) {
+                List<Map<String, Object>> limitedErrors = errors.subList(0, 50);
+                result.put("errors", limitedErrors);
+                result.put("errorCount", errors.size());
+                result.put("additionalErrors", errors.size() - 50);
+                System.out.println("Total errors: " + errors.size() + " (only first 50 shown in response)");
+            } else {
+                result.put("errors", errors);
+            }
+        }
+        
+        // Log final summary
+        System.out.println("=== BATCH SEND SUMMARY ===");
+        System.out.println("Total recipients: " + recipients.size());
+        System.out.println("Successfully sent: " + sent);
+        System.out.println("Failed: " + (recipients.size() - sent));
+        if (!errors.isEmpty()) {
+            System.out.println("Error details: " + errors.size() + " errors encountered");
+        }
+        System.out.println("=== END BATCH SEND SUMMARY ===");
+        
         return result;
     }
 
@@ -438,7 +529,6 @@ public class WabaMessagesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> apiResponse = restTemplate.exchange(
                 url, HttpMethod.GET, entity, Map.class);
             
@@ -488,23 +578,11 @@ public class WabaMessagesController {
             System.out.println("Looking for user with phone: " + phoneNumber);
             
             // Try exact match first
-            Optional<UserDetails> user = userDetailsRepository.findByPhoneNo(phoneNumber);
+            Optional<UserDetails> user = findUserByPhoneNumberWithNormalization(phoneNumber);
             if (user.isPresent()) {
                 response.put("status", "success");
                 response.put("user", user.get());
                 System.out.println("Found user with exact match: " + user.get().getName());
-                return response;
-            }
-            
-            // Try normalized match
-            String normalized = normalizePhoneNumber(phoneNumber);
-            System.out.println("Trying normalized phone: " + normalized);
-            user = userDetailsRepository.findByPhoneNo(normalized);
-            if (user.isPresent()) {
-                response.put("status", "success");
-                response.put("user", user.get());
-                response.put("normalizedMatch", true);
-                System.out.println("Found user with normalized match: " + user.get().getName());
                 return response;
             }
             
@@ -532,7 +610,7 @@ public class WabaMessagesController {
         Map<String, Object> response = new HashMap<>();
         try {
             System.out.println("Looking up user by phone: '" + phoneNumber + "'");
-            Optional<UserDetails> user = userDetailsRepository.findByPhoneNo(phoneNumber);
+            Optional<UserDetails> user = findUserByPhoneNumberWithNormalization(phoneNumber);
             if (user.isPresent()) {
                 response.put("status", "success");
                 response.put("user", Map.of(
@@ -544,19 +622,6 @@ public class WabaMessagesController {
             } else {
                 response.put("status", "not_found");
                 response.put("message", "No user found with phone: " + phoneNumber);
-                
-                // Try with normalized phone number
-                String normalized = normalizePhoneNumber(phoneNumber);
-                System.out.println("Trying with normalized phone: '" + normalized + "'");
-                Optional<UserDetails> normalizedUser = userDetailsRepository.findByPhoneNo(normalized);
-                if (normalizedUser.isPresent()) {
-                    response.put("normalized_match", Map.of(
-                        "id", normalizedUser.get().getId(),
-                        "name", normalizedUser.get().getName(),
-                        "phone", normalizedUser.get().getPhoneNo(),
-                        "email", normalizedUser.get().getEmail()
-                    ));
-                }
             }
         } catch (Exception e) {
             response.put("status", "error");
@@ -566,7 +631,7 @@ public class WabaMessagesController {
         return response;
     }
 
-    // Add a method to test exact phone number matching
+    // Add a method to test phone number matching
     @GetMapping("/debug/test-phone-match")
     public Map<String, Object> debugPhoneMatch() {
         Map<String, Object> response = new HashMap<>();
@@ -606,7 +671,7 @@ public class WabaMessagesController {
             System.out.println("Template body: " + templateBody);
             
             // Try to find user by phone number
-            Optional<UserDetails> userDetailsOpt = userDetailsRepository.findByPhoneNo(phoneNumber);
+            Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(phoneNumber);
             if (userDetailsOpt.isPresent()) {
                 UserDetails userDetails = userDetailsOpt.get();
                 System.out.println("Found user: " + userDetails.getName());
@@ -631,7 +696,7 @@ public class WabaMessagesController {
         return response;
     }
 
-    // Add a simple test method for direct personalization testing
+    // Add a method to test direct personalization
     @PostMapping("/debug/direct-personalize")
     public Map<String, Object> directPersonalize(@RequestBody Map<String, Object> request) {
         Map<String, Object> response = new HashMap<>();
@@ -644,7 +709,7 @@ public class WabaMessagesController {
             System.out.println("Parameters: " + parameters);
             
             // Try to find user by phone number
-            Optional<UserDetails> userDetailsOpt = userDetailsRepository.findByPhoneNo(phoneNumber);
+            Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(phoneNumber);
             if (userDetailsOpt.isPresent()) {
                 UserDetails userDetails = userDetailsOpt.get();
                 System.out.println("Found user: " + userDetails.getName());
@@ -676,7 +741,7 @@ public class WabaMessagesController {
         return response;
     }
 
-    // Add a completely standalone test for personalization
+    // Add a method for standalone personalization test
     @PostMapping("/debug/standalone-test")
     public Map<String, Object> standaloneTest(@RequestBody Map<String, Object> request) {
         Map<String, Object> response = new HashMap<>();
@@ -730,7 +795,6 @@ public class WabaMessagesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> apiResponse = restTemplate.exchange(
                 url, HttpMethod.GET, entity, Map.class);
             
@@ -761,7 +825,6 @@ public class WabaMessagesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> apiResponse = restTemplate.exchange(
                 url, HttpMethod.GET, entity, Map.class);
             
@@ -847,7 +910,6 @@ public class WabaMessagesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> apiResponse = restTemplate.exchange(
                 url, HttpMethod.GET, entity, Map.class);
             
@@ -907,7 +969,6 @@ public class WabaMessagesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> apiResponse = restTemplate.exchange(
                 url, HttpMethod.GET, entity, Map.class);
             
@@ -982,7 +1043,6 @@ public class WabaMessagesController {
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
             
-            RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> response = restTemplate.exchange(
                 url, HttpMethod.GET, entity, Map.class);
             
@@ -1070,5 +1130,304 @@ public class WabaMessagesController {
             }
         }
         System.out.println("Components after replacement: " + components);
+    }
+    
+    // Helper method to process large batches in smaller chunks
+    private Map<String, Object> processLargeBatchInChunks(SendTemplateRequest originalRequest, List<String> allRecipients) {
+        Map<String, Object> finalResult = new HashMap<>();
+        int totalSent = 0;
+        int totalFailed = 0;
+        List<Map<String, Object>> allErrors = new ArrayList<>();
+        
+        // Split into chunks of 100 recipients each (hardcoded instead of using BatchProcessingUtil)
+        int chunkSize = 100;
+        List<List<String>> chunks = new ArrayList<>();
+        for (int i = 0; i < allRecipients.size(); i += chunkSize) {
+            int end = Math.min(i + chunkSize, allRecipients.size());
+            chunks.add(allRecipients.subList(i, end));
+        }
+        System.out.println("Splitting " + allRecipients.size() + " recipients into " + chunks.size() + " chunks of max " + chunkSize + " each");
+        
+        for (int i = 0; i < chunks.size(); i++) {
+            List<String> chunk = chunks.get(i);
+            System.out.println("Processing chunk " + (i+1) + "/" + chunks.size() + " with " + chunk.size() + " recipients");
+            
+            // Create a new request for this chunk
+            SendTemplateRequest chunkRequest = new SendTemplateRequest();
+            chunkRequest.templateName = originalRequest.templateName;
+            chunkRequest.language = originalRequest.language;
+            chunkRequest.to = chunk;
+            chunkRequest.parameters = originalRequest.parameters;
+            chunkRequest.headerFormat = originalRequest.headerFormat;
+            chunkRequest.headerText = originalRequest.headerText;
+            chunkRequest.mediaId = originalRequest.mediaId;
+            chunkRequest.personalizeWithUserData = originalRequest.personalizeWithUserData;
+            // Copy additional fields if they exist
+            chunkRequest.headerMediaUrl = originalRequest.headerMediaUrl;
+            chunkRequest.headerMediaFilename = originalRequest.headerMediaFilename;
+            
+            // Process this chunk
+            Map<String, Object> chunkResult = sendTemplateChunk(chunkRequest);
+            
+            // Aggregate results
+            Integer chunkSent = (Integer) chunkResult.get("sent");
+            Integer chunkFailed = (Integer) chunkResult.get("failed");
+            
+            if (chunkSent != null) totalSent += chunkSent;
+            if (chunkFailed != null) totalFailed += chunkFailed;
+            
+            // Collect errors
+            Object errorsObj = chunkResult.get("errors");
+            if (errorsObj instanceof List) {
+                allErrors.addAll((List<Map<String, Object>>) errorsObj);
+            }
+            
+            // Add a delay between chunks to avoid rate limiting
+            // Using minimum safe delay between chunks
+            if (i < chunks.size() - 1) { // Don't delay after the last chunk
+                try {
+                    System.out.println("Waiting 10 seconds between chunks to avoid rate limiting...");
+                    Thread.sleep(10000); // Minimum safe delay: 10 seconds between chunks
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.err.println("Interrupted while waiting between chunks: " + e.getMessage());
+                    break;
+                }
+            }
+
+        }
+        
+        // Prepare final result
+        finalResult.put("status", allErrors.isEmpty() ? "success" : (totalSent > 0 ? "partial_success" : "error"));
+        finalResult.put("message", String.format("Processed %d recipients in %d chunks: %d successful, %d failed", 
+            allRecipients.size(), chunks.size(), totalSent, totalFailed));
+        finalResult.put("sent", totalSent);
+        finalResult.put("failed", totalFailed);
+        finalResult.put("total", allRecipients.size());
+        finalResult.put("chunks", chunks.size());
+
+        if (!allErrors.isEmpty()) {
+            // Limit errors in response to prevent oversized responses
+            if (allErrors.size() > 50) {
+                finalResult.put("errors", allErrors.subList(0, 50));
+                finalResult.put("errorCount", allErrors.size());
+                finalResult.put("additionalErrors", allErrors.size() - 50);
+            } else {
+                finalResult.put("errors", allErrors);
+            }
+        }
+        
+        System.out.println("=== LARGE BATCH PROCESSING COMPLETE ===");
+        System.out.println("Total recipients: " + allRecipients.size());
+        System.out.println("Chunks processed: " + chunks.size());
+        System.out.println("Total sent: " + totalSent);
+        System.out.println("Total failed: " + totalFailed);
+        System.out.println("=== END LARGE BATCH PROCESSING ===");
+        
+        return finalResult;
+    }
+    
+    // Helper method to send a chunk of messages
+    private Map<String, Object> sendTemplateChunk(SendTemplateRequest req) {
+        // This is a simplified version of the main sendTemplate logic for chunks
+        // We'll reuse the existing logic but with some modifications for chunked processing
+        
+        Map<String, Object> result = new HashMap<>();
+        int sent = 0;
+        List<Map<String, Object>> errors = new ArrayList<>();
+        
+        String url = String.format("https://graph.facebook.com/v19.0/%s/messages", phoneNumberId);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        
+        // Keep track of the last recipient to implement longer delays for consecutive messages to same number
+        String lastRecipient = null;
+        
+        // Process each recipient in the chunk
+        for (int i = 0; i < req.to.size(); i++) {
+            String to = req.to.get(i);
+            System.out.println("Processing chunk recipient " + (i+1) + "/" + req.to.size() + ": " + to);
+            
+            // Add a delay between messages to avoid rate limiting
+            // Using minimum safe delays to optimize sending speed while avoiding rate limits
+            if (i > 0) {
+                try {
+                    long delayMs = 1000; // Minimum safe delay: 1 second for different recipients
+                    
+                    // If sending to the same number as the last message, use a longer delay
+                    // This is specifically for consecutive messages to the same phone number
+                    // WhatsApp rate limits are per "Business Account, Consumer Account" pair
+                    if (to.equals(lastRecipient)) {
+                        delayMs = 2000; // 2 seconds for consecutive messages to same number (as requested)
+                        System.out.println("Consecutive message to same recipient (" + to + "). Using 2-second delay to avoid rate limiting...");
+                    } else {
+                        System.out.println("Different recipient. Waiting 1 second before sending next message...");
+                    }
+                    
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    System.err.println("Interrupted while waiting: " + e.getMessage());
+                    Map<String, Object> error = new HashMap<>();
+                    error.put("to", to);
+                    error.put("error", "Process interrupted: " + e.getMessage());
+                    errors.add(error);
+                    break;
+                }
+            }
+            
+            lastRecipient = to; // Update the last recipient
+            
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("messaging_product", "whatsapp");
+            payload.put("to", to);
+            payload.put("type", "template");
+
+            Map<String, Object> template = new LinkedHashMap<>();
+            template.put("name", req.templateName);
+            Map<String, Object> language = new HashMap<>();
+            language.put("code", req.language);
+            template.put("language", language);
+
+            // Build components (simplified version)
+            List<Map<String, Object>> components = new ArrayList<>();
+            
+            // Add body component if we have parameters
+            if (req.parameters != null && !req.parameters.isEmpty()) {
+                Map<String, Object> bodyComp = new HashMap<>();
+                bodyComp.put("type", "body");
+                List<Map<String, Object>> bodyParams = new ArrayList<>();
+                
+                for (Object param : req.parameters) {
+                    Map<String, Object> paramMap = new HashMap<>();
+                    paramMap.put("type", "text");
+                    
+                    if (param instanceof String) {
+                        paramMap.put("text", param);
+                    } else if (param instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> p = (Map<String, Object>) param;
+                        paramMap.put("text", p.getOrDefault("text", ""));
+                    } else {
+                        paramMap.put("text", String.valueOf(param));
+                    }
+                    
+                    bodyParams.add(paramMap);
+                }
+                
+                if (!bodyParams.isEmpty()) {
+                    bodyComp.put("parameters", bodyParams);
+                    components.add(bodyComp);
+                }
+            }
+            
+            if (!components.isEmpty()) {
+                template.put("components", components);
+            }
+            
+            payload.put("template", template);
+            
+            try {
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
+                ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    url, 
+                    HttpMethod.POST, 
+                    request, 
+                    new ParameterizedTypeReference<>() {});
+                
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    sent++;
+                    System.out.println("Message sent successfully to " + to);
+                } else {
+                    Map<String, Object> error = new HashMap<>();
+                    String errorMsg = "Status: " + response.getStatusCode().value();
+                    if (response.getBody() != null) {
+                        errorMsg += " - " + response.getBody().toString();
+                    }
+                    error.put("to", to);
+                    error.put("error", errorMsg);
+                    errors.add(error);
+                    System.err.println("Error sending to " + to + ": " + errorMsg);
+                }
+            } catch (Exception e) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("to", to);
+                error.put("error", "Error sending message: " + e.getMessage());
+                errors.add(error);
+                System.err.println("Exception sending to " + to + ": " + e.getMessage());
+            }
+        }
+        
+        result.put("sent", sent);
+        result.put("failed", req.to.size() - sent);
+        if (!errors.isEmpty()) {
+            result.put("errors", errors);
+        }
+        
+        return result;
+    }
+
+    // Helper method to find a user by phone number, handling cases where multiple users have the same phone number
+    private Optional<UserDetails> findUserByPhoneNumber(String phoneNumber) {
+        try {
+            // First try the unique lookup
+            return userDetailsRepository.findByPhoneNo(phoneNumber);
+        } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
+            // Handle case where multiple users have the same phone number
+            System.out.println("Multiple users found for phone number: " + phoneNumber + ". Using the first one.");
+            List<UserDetails> usersWithSamePhone = userDetailsRepository.findAllByPhoneNo(phoneNumber);
+            if (!usersWithSamePhone.isEmpty()) {
+                return Optional.of(usersWithSamePhone.get(0)); // Use the first one
+            }
+            return Optional.empty();
+        }
+    }
+
+    // Helper method to find a user by phone number with normalization, handling cases where multiple users have the same phone number
+    private Optional<UserDetails> findUserByPhoneNumberWithNormalization(String phoneNumber) {
+        // Try exact match first
+        Optional<UserDetails> user = findUserByPhoneNumber(phoneNumber);
+        if (user.isPresent()) {
+            return user;
+        }
+        
+        // Try normalized match
+        String normalized = normalizePhoneNumber(phoneNumber);
+        if (!normalized.equals(phoneNumber)) {
+            return findUserByPhoneNumber(normalized);
+        }
+        
+        return Optional.empty();
+    }
+    
+    // Helper method to calculate delay with exponential backoff for rate limiting
+    private long calculateDelayWithBackoff(int messageIndex, List<Map<String, Object>> errors) {
+        // Base delay of 2 seconds
+        long baseDelay = 2000;
+        
+        // Check if we've had recent rate limit errors
+        int recentRateLimitErrors = 0;
+        for (Map<String, Object> error : errors) {
+            Object errorCodeObj = error.get("errorCode");
+            if (errorCodeObj instanceof String && "HTTP_ERROR".equals(errorCodeObj)) {
+                Object statusCodeObj = error.get("statusCode");
+                if (statusCodeObj instanceof Integer && (Integer) statusCodeObj == 400) {
+                    Object errorMsgObj = error.get("error");
+                    if (errorMsgObj instanceof String && ((String) errorMsgObj).contains("rate limit")) {
+                        recentRateLimitErrors++;
+                    }
+                }
+            }
+        }
+        
+        // Increase delay exponentially based on recent errors
+        if (recentRateLimitErrors > 0) {
+            // Double the delay for each recent rate limit error, up to a maximum of 30 seconds
+            long exponentialDelay = baseDelay * (long) Math.pow(2, Math.min(recentRateLimitErrors, 4));
+            return Math.min(exponentialDelay, 30000); // Cap at 30 seconds
+        }
+        
+        return baseDelay;
     }
 }

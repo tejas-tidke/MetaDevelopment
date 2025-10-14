@@ -12,4 +12,5 @@ public interface UserDetailsRepository extends JpaRepository<UserDetails, Long> 
     List<UserDetails> findAll();
     List<UserDetails> findByUploadedFileId(Long uploadedFileId);
     Optional<UserDetails> findByPhoneNo(String phoneNo);
+    List<UserDetails> findAllByPhoneNo(String phoneNo); // New method to handle multiple users with same phone number
 }

@@ -10,7 +10,12 @@ function Templates() {
   // Protect this component from unauthorized access
   useAuthProtection();
 
-  const selected = location.state?.selected || [];
+  // Get file ID from location state
+  const fileId = location.state?.fileId;
+  
+  // Initialize selected users as empty array
+  const [selected, setSelected] = useState([]);
+  
   const [templates, setTemplates] = useState([]);
   const [tplLoading, setTplLoading] = useState(true);
   const [tplError, setTplError] = useState(null);
@@ -27,6 +32,31 @@ function Templates() {
   const [personalizeWithUserData, setPersonalizeWithUserData] = useState(true); // New state for personalization
   // Body variables
   const [bodyParams, setBodyParams] = useState([]);
+
+  // Fetch user data when fileId is available
+  useEffect(() => {
+    if (fileId) {
+      const fetchUserData = async () => {
+        try {
+          const response = await api.get(`/files/${fileId}/user-details`);
+          if (response.data?.status === "success") {
+            // Convert user details to the format expected by the component
+            const userData = response.data.data.map(user => ({
+              id: user.id,
+              name: user.name,
+              phoneNo: user.phoneNo,
+              email: user.email,
+              companyName: user.companyName
+            }));
+            setSelected(userData);
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        }
+      };
+      fetchUserData();
+    }
+  }, [fileId]);
 
   useEffect(() => {
     const fetchTemplates = async () => {
