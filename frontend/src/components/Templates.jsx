@@ -12,6 +12,7 @@ function Templates() {
 
   // Get file ID from location state
   const fileId = location.state?.fileId;
+  const selectedFromState = location.state?.selected;
   
   // Initialize selected users as empty array
   const [selected, setSelected] = useState([]);
@@ -33,30 +34,41 @@ function Templates() {
   // Body variables
   const [bodyParams, setBodyParams] = useState([]);
 
-  // Fetch user data when fileId is available
+  const normalizeUsers = (users) =>
+    (users || []).map((user, index) => ({
+      id: user?.id ?? `selected-${index}`,
+      name: user?.name ?? "",
+      phoneNo: user?.phoneNo ?? user?.phone ?? "",
+      email: user?.email ?? "",
+      companyName: user?.companyName ?? user?.company ?? ""
+    }));
+
+  // Prefer users passed from ExistingList; fallback to file-based users when fileId is provided.
   useEffect(() => {
+    if (Array.isArray(selectedFromState) && selectedFromState.length > 0) {
+      setSelected(normalizeUsers(selectedFromState));
+      return;
+    }
+
     if (fileId) {
       const fetchUserData = async () => {
         try {
           const response = await api.get(`/files/${fileId}/user-details`);
           if (response.data?.status === "success") {
-            // Convert user details to the format expected by the component
-            const userData = response.data.data.map(user => ({
-              id: user.id,
-              name: user.name,
-              phoneNo: user.phoneNo,
-              email: user.email,
-              companyName: user.companyName
-            }));
-            setSelected(userData);
+            setSelected(normalizeUsers(response.data.data || []));
+          } else {
+            setSelected([]);
           }
         } catch (error) {
           console.error("Error fetching user data:", error);
+          setSelected([]);
         }
       };
       fetchUserData();
+    } else {
+      setSelected([]);
     }
-  }, [fileId]);
+  }, [fileId, selectedFromState]);
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -131,11 +143,13 @@ function Templates() {
   const headerFormat = (selectedTemplate?.headerFormat || "").toUpperCase();
   const bodyParamCount = Number(selectedTemplate?.bodyParamCount || 0);
   const headerParamCount = Number(selectedTemplate?.headerParamCount || 0);
+  const hasDynamicTextHeader = headerFormat === "TEXT" && headerParamCount > 0;
+  const hasMediaHeader = ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat);
+  const requiresHeaderInput = hasDynamicTextHeader || hasMediaHeader;
   const headerOk = (() => {
-    if (!headerFormat) return true;
-    // TEXT header must be filled only if it has placeholders
-    if (headerFormat === "TEXT") return headerParamCount === 0 || headerText.trim().length > 0;
-    if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat)) {
+    if (!requiresHeaderInput) return true;
+    if (hasDynamicTextHeader) return headerText.trim().length > 0;
+    if (hasMediaHeader) {
       // For media headers, either a file should be uploaded or a media ID should be provided
       return (headerMediaUrl.trim().length > 0 && headerMediaFile) || mediaId.trim().length > 0;
     }
@@ -210,15 +224,11 @@ function Templates() {
     let parameters = [];
 
     // Handle header parameters first (if any)
-    if (headerFormat) {
+    if (hasDynamicTextHeader && headerText.trim()) {
+      payload.headerFormat = "TEXT";
+      payload.headerText = headerText.trim();
+    } else if (hasMediaHeader && (mediaUrl.trim() || mediaId.trim())) {
       payload.headerFormat = headerFormat;
-      
-      if (headerFormat === "TEXT" && headerText.trim()) {
-        // For text headers, just set the headerText
-        payload.headerText = headerText.trim();
-      } 
-      else if (["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat) && 
-              (mediaUrl.trim() || mediaId.trim())) {
         // For media headers, create the correct parameter structure
         const mediaParam = {
           type: headerFormat.toLowerCase()
@@ -242,8 +252,7 @@ function Templates() {
         console.log('Media parameter:', mediaParam);
         
         // Add to parameters array as the first parameter
-        parameters.unshift(mediaParam);
-      }
+      parameters.unshift(mediaParam);
     }
 
     // Add body parameters
@@ -449,26 +458,31 @@ function Templates() {
                     Header format: {selectedTemplate.headerFormat}
                   </div>
                 )}
+                {headerFormat === "TEXT" && headerParamCount === 0 && (
+                  <div className="mt-2 text-xs text-emerald-700">
+                    This template uses a fixed header. No header input is required.
+                  </div>
+                )}
               </div>
               
               {/* Header Input */}
-              {headerFormat && (
+              {requiresHeaderInput && (
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-2">
                     <label className="block text-sm font-medium text-gray-700">
                       Header Content
                     </label>
                     <span className="text-xs text-gray-500">
-                      {headerFormat} {headerParamCount > 0 ? `(${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''})` : ''}
+                      {headerFormat} {hasDynamicTextHeader ? `(${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''})` : ''}
                     </span>
                   </div>
                   
-                  {headerFormat === "TEXT" ? (
+                  {hasDynamicTextHeader ? (
                     <input
                       type="text"
                       value={headerText}
                       onChange={e => setHeaderText(e.target.value)}
-                      placeholder={headerParamCount > 0 ? `Enter header text with ${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''}` : "Enter header text"}
+                      placeholder={`Enter header text with ${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''}`}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     />
                   ) : (

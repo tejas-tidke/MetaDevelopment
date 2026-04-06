@@ -161,17 +161,18 @@ public class WabaMessagesController {
 
             // Build components list dynamically (header + body)
             List<Map<String, Object>> components = new ArrayList<>();
+            boolean headerUsesFirstParameter = false;
 
             // Optional header support: TEXT or media (IMAGE/VIDEO/DOCUMENT)
-            // Only add header if headerFormat is provided and we have either headerText or parameters
+            // Only add a header component when we actually have dynamic header input to send.
             if (req.headerFormat != null && !req.headerFormat.isBlank()) {
                 String fmt = req.headerFormat.trim().toUpperCase(Locale.ROOT);
-                Map<String, Object> headerComp = new HashMap<>();
-                headerComp.put("type", "header");
 
                 // Header support: TEXT or media (IMAGE/VIDEO/DOCUMENT)
                 if ("TEXT".equals(fmt)) {
-                    // Only add header text if it's provided and not empty
+                    // Only send text header parameters when explicit header text is provided.
+                    // Do not auto-consume req.parameters[0] for text headers because that can
+                    // incorrectly turn the first body variable into a header variable.
                     if (req.headerText != null && !req.headerText.isBlank()) {
                         Map<String, Object> headerComponent = new HashMap<>();
                         headerComponent.put("type", "header");
@@ -184,23 +185,6 @@ public class WabaMessagesController {
                         
                         headerComponent.put("parameters", headerParams);
                         components.add(headerComponent);
-                    } else if (req.parameters != null && !req.parameters.isEmpty()) {
-                        // Check if the first parameter is meant for the header
-                        String text = req.getParameterAsString(0);
-                        if (text != null && !text.isBlank()) {
-                            Map<String, Object> headerComponent = new HashMap<>();
-                            headerComponent.put("type", "header");
-                            
-                            List<Map<String, Object>> headerParams = new ArrayList<>();
-                            Map<String, Object> textParam = new HashMap<>();
-                            textParam.put("type", "text");
-                            textParam.put("text", text);
-                            headerParams.add(textParam);
-                            
-                            headerComponent.put("parameters", headerParams);
-                            components.add(headerComponent);
-                            // Don't remove from original list, we'll handle this differently
-                        }
                     }
                 } 
                 // Handle media headers from parameters
@@ -237,7 +221,7 @@ public class WabaMessagesController {
                         headerComponent.put("parameters", headerParams);
                         
                         components.add(headerComponent);
-                        // Don't remove from original list, we'll handle this differently
+                        headerUsesFirstParameter = true;
                         System.out.println("Created header component: " + headerComponent);
                     }
                 }
@@ -281,15 +265,9 @@ public class WabaMessagesController {
                 // Create a copy of parameters to avoid modifying the original
                 List<Object> paramsCopy = new ArrayList<>(req.parameters);
                 
-                // If we have a header and it needs the first parameter, remove it from the copy
-                if (req.headerFormat != null && !req.headerFormat.isBlank()) {
-                    String fmt = req.headerFormat.trim().toUpperCase(Locale.ROOT);
-                    if (("TEXT".equals(fmt) && (req.headerText == null || req.headerText.isBlank())) || 
-                        Arrays.asList("IMAGE", "VIDEO", "DOCUMENT").contains(fmt)) {
-                        if (!paramsCopy.isEmpty()) {
-                            paramsCopy.remove(0); // Remove the first parameter used for header
-                        }
-                    }
+                // Remove only the first parameter when it was explicitly consumed by media header.
+                if (headerUsesFirstParameter && !paramsCopy.isEmpty()) {
+                    paramsCopy.remove(0);
                 }
                 
                 System.out.println("Processing body parameters: " + paramsCopy);

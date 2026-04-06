@@ -19,6 +19,7 @@ function ExistingList() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const safeUploadedFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
 
   useEffect(() => {
     const fetchUserDetails = async () => {
@@ -43,10 +44,15 @@ function ExistingList() {
       try {
         setLoading(prev => ({ ...prev, files: true }));
         const response = await api.get("files");
-        setUploadedFiles(response.data || []);
+        const files =
+          Array.isArray(response.data) ? response.data :
+          Array.isArray(response.data?.data) ? response.data.data :
+          [];
+        setUploadedFiles(files);
       } catch (err) {
         setError(prev => ({ ...prev, files: "Error fetching uploaded files" }));
         console.error("Error fetching uploaded files:", err);
+        setUploadedFiles([]);
       } finally {
         setLoading(prev => ({ ...prev, files: false }));
       }
@@ -457,7 +463,7 @@ function ExistingList() {
                 renderLoading()
               ) : error.files ? (
                 renderError(error.files)
-              ) : uploadedFiles.length === 0 ? (
+              ) : safeUploadedFiles.length === 0 ? (
                 <div className="p-8 text-center">
                   <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -489,7 +495,7 @@ function ExistingList() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {uploadedFiles.map((file) => (
+                      {safeUploadedFiles.map((file) => (
                         <tr key={file.id} className="hover:bg-gray-50">
                           <td className="px-5 py-3 whitespace-nowrap">
                             <div className="flex items-center">
