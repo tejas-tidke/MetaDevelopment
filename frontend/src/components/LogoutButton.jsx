@@ -1,7 +1,8 @@
 import React from "react";
 import { logout } from "../services/authService";
+import AppButton from "./ui/AppButton";
 
-function LogoutButton({ className, onLogout }) {
+function LogoutButton({ className, onLogout, variant = "danger", size = "md", icon }) {
   const handleLogout = async () => {
     try {
       await logout();
@@ -14,12 +15,15 @@ function LogoutButton({ className, onLogout }) {
   };
 
   return (
-    <button
+    <AppButton
       onClick={handleLogout}
-      className={className || "px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 text-sm font-medium"}
+      className={className}
+      variant={variant}
+      size={size}
+      icon={icon}
     >
       Logout
-    </button>
+    </AppButton>
   );
 }
 

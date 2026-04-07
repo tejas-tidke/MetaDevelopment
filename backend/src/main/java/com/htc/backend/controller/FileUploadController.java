@@ -88,8 +88,27 @@ public class FileUploadController {
             
             // Prepare response
             Map<String, Object> response = new HashMap<>();
-            response.put("status", "success");
-            response.put("message", "File uploaded and processed successfully");
+            int processedRecords = uploadedFile.getProcessedRecords() != null ? uploadedFile.getProcessedRecords() : 0;
+            int skippedRecords = uploadedFile.getErrorRecords() != null ? uploadedFile.getErrorRecords() : 0;
+
+            if (skippedRecords > 0) {
+                response.put("status", "partial_success");
+                response.put(
+                        "message",
+                        String.format(
+                                "File processed with warnings: %d record(s) imported and %d row(s) skipped.",
+                                processedRecords,
+                                skippedRecords
+                        )
+                );
+                response.put("warnings", uploadedFile.getErrorMessage());
+            } else {
+                response.put("status", "success");
+                response.put("message", "File uploaded and processed successfully");
+            }
+
+            response.put("processedRecords", processedRecords);
+            response.put("skippedRecords", skippedRecords);
             response.put("file", uploadedFile);
             
             return ResponseEntity.ok(response);

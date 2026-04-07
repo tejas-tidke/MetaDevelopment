@@ -1,5 +1,11 @@
-/* src/App.css */
 #root {
-  margin: 0 auto;
-  text-align: center;
+  min-height: 100vh;
+}
+
+.App {
+  min-height: 100vh;
+}
+
+.app-route-full {
+  min-height: 100vh;
 }

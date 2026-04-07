@@ -2,6 +2,10 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import LogoutButton from "./LogoutButton";
 import { useAuthProtection } from "../hooks/useAuthProtection";
+import WorkspaceHeader from "./WorkspaceHeader";
+import AppButton from "./ui/AppButton";
+import AppCard from "./ui/AppCard";
+import PageLayout from "./ui/PageLayout";
 
 function Welcome() {
   const navigate = useNavigate();
@@ -10,21 +14,35 @@ function Welcome() {
   useAuthProtection();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header with logout button */}
-        <div className="flex justify-between items-center mb-4">
-          <button
-            onClick={() => navigate('/profile')}
-            className="px-4 py-2 bg-white text-gray-700 font-medium rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm flex items-center"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-            Profile
-          </button>
-          <LogoutButton />
-        </div>
+    <PageLayout>
+        <WorkspaceHeader
+          title="Welcome to your workspace"
+          subtitle="You are signed in and ready to continue managing files, templates, and user data."
+          showBack={false}
+          showHome={false}
+          actions={
+            <>
+              <AppButton
+                onClick={() => navigate("/profile")}
+                variant="secondary"
+                >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+                Profile
+              </AppButton>
+              <LogoutButton
+                variant="danger"
+                onLogout={() => navigate("/login")}
+              />
+            </>
+          }
+        />
         
         <div className="h-full flex flex-col items-center justify-center text-center">
           <div className="mb-10">
@@ -40,19 +58,21 @@ function Welcome() {
           </div>
           
           <div className="w-full max-w-sm">
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <AppCard className="p-6">
               <h2 className="text-lg font-semibold text-gray-800 mb-5">Get Started</h2>
               
               <div className="space-y-4">
-                <button
+                <AppButton
                   onClick={() => navigate('/existing-list')}
-                  className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white font-medium rounded-lg hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 shadow-sm hover:shadow-md flex items-center justify-center"
+                  variant="primary"
+                  size="lg"
+                  fullWidth
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                   View Existing Data
-                </button>
+                </AppButton>
                 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -63,27 +83,28 @@ function Welcome() {
                   </div>
                 </div>
                 
-                <button
+                <AppButton
                   onClick={() => navigate('/file-upload')}
-                  className="w-full px-4 py-2.5 bg-white border border-blue-600 text-blue-600 font-medium rounded-lg hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center"
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
                   Upload New File
-                </button>
+                </AppButton>
               </div>
-            </div>
+            </AppCard>
             
             <div className="mt-6 text-center">
               <p className="text-xs text-gray-500">
-                Need help? Check out our <a href="#" className="text-blue-600 hover:text-blue-800">documentation</a> or <a href="#" className="text-blue-600 hover:text-blue-800">contact support</a>.
+                Need help? Check out our <a href="#" className="text-blue-700 hover:text-blue-800">documentation</a> or <a href="#" className="text-blue-700 hover:text-blue-800">contact support</a>.
               </p>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 

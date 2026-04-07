@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect } from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Welcome from './components/Welcome';
@@ -13,7 +13,77 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { initAuthListener } from './services/authService';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import './App.css';
+import "./App.css";
+import "./styles/auth.css";
+import "./styles/workspace.css";
+
+function AppRoutes() {
+  return (
+    <div className="app-route-full">
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/" element={<Login />} />
+        <Route
+          path="/welcome"
+          element={
+            <ProtectedRoute>
+              <Welcome />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/templates"
+          element={
+            <ProtectedRoute>
+              <Templates />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/existing-list"
+          element={
+            <ProtectedRoute>
+              <ExistingList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/file-upload"
+          element={
+            <ProtectedRoute>
+              <FileUpload />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <UserProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/uploaded-data"
+          element={
+            <ProtectedRoute>
+              <UploadedData />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/uploaded-data-select"
+          element={
+            <ProtectedRoute>
+              <UploadedDataSelect />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </div>
+  );
+}
 
 function App() {
   useEffect(() => {
@@ -48,48 +118,7 @@ function App() {
   return (
     <Router>
       <div className="App">
-        <div className="container mx-auto p-4">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/" element={<Login />} />
-            <Route path="/welcome" element={
-              <ProtectedRoute>
-                <Welcome />
-              </ProtectedRoute>
-            } />
-            <Route path="/templates" element={
-              <ProtectedRoute>
-                <Templates />
-              </ProtectedRoute>
-            } />
-            <Route path="/existing-list" element={
-              <ProtectedRoute>
-                <ExistingList />
-              </ProtectedRoute>
-            } />
-            <Route path="/file-upload" element={
-              <ProtectedRoute>
-                <FileUpload />
-              </ProtectedRoute>
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute>
-                <UserProfile />
-              </ProtectedRoute>
-            } />
-            <Route path="/uploaded-data" element={
-              <ProtectedRoute>
-                <UploadedData />
-              </ProtectedRoute>
-            } />
-            <Route path="/uploaded-data-select" element={
-              <ProtectedRoute>
-                <UploadedDataSelect />
-              </ProtectedRoute>
-            } />
-          </Routes>
-        </div>
+        <AppRoutes />
       </div>
     </Router>
   );

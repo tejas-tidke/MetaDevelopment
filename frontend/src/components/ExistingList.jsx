@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthProtection } from '../hooks/useAuthProtection';
+import WorkspaceHeader from './WorkspaceHeader';
+import AppButton from './ui/AppButton';
+import AppCard from './ui/AppCard';
+import AppAlert from './ui/AppAlert';
+import PageLayout from './ui/PageLayout';
 
 function ExistingList() {
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Protect this component from unauthorized access
   useAuthProtection();
@@ -181,9 +187,9 @@ function ExistingList() {
 
   const getSortIcon = (columnName) => {
     if (sortConfig.key === columnName) {
-      return sortConfig.direction === "asc" ? "↑" : "↓";
+      return sortConfig.direction === "asc" ? "^" : "v";
     }
-    return "↕";
+    return "<>";
   };
 
   // Format file size
@@ -196,41 +202,24 @@ function ExistingList() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Data Management</h1>
-              <p className="text-gray-600 mt-1">View and manage all user data and uploaded files</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => navigate('/file-upload')}
-                className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-md text-sm font-medium hover:from-blue-700 hover:to-indigo-800 flex items-center"
-              >
-                <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                Upload New File
-              </button>
-              <button
-                onClick={() => navigate(-1)}
-                className="px-3 py-1.5 bg-white text-gray-700 rounded-md border border-gray-300 hover:bg-gray-50 text-sm flex items-center"
-              >
-                <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-                Back
-              </button>
-            </div>
-          </div>
-        </div>
+    <PageLayout>
+        <WorkspaceHeader
+          title="Data Management"
+          subtitle="View and manage all user records and file uploads in one place."
+          backFallback="/welcome"
+          actions={
+            <AppButton onClick={() => navigate('/file-upload')} variant="primary">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload New File
+            </AppButton>
+          }
+        />
 
         {/* Success Message */}
         {location.state?.uploadSuccess && (
-          <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-md">
+          <AppAlert tone="success" className="mb-6">
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
@@ -248,7 +237,7 @@ function ExistingList() {
                 </div>
               </div>
             </div>
-          </div>
+          </AppAlert>
         )}
 
         {/* Tabs */}
@@ -286,7 +275,7 @@ function ExistingList() {
         {activeTab === 'users' ? (
           <>
             {/* User Details Table */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <AppCard className="overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-800">All User Details</h2>
@@ -317,7 +306,7 @@ function ExistingList() {
                       isDeleting || deletableCount === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
                     }`}
                   >
-                    {isDeleting ? 'Deleting…' : `Delete Selected${deletableCount ? ` (${deletableCount})` : ''}`}
+                    {isDeleting ? 'Deleting...' : `Delete Selected${deletableCount ? ` (${deletableCount})` : ''}`}
                   </button>
                 </div>
               </div>
@@ -439,19 +428,19 @@ function ExistingList() {
                     onClick={handleContinue}
                     disabled={selectedCount === 0}
                     className={`px-4 py-2 rounded-md text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                      selectedCount === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+                      selectedCount === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-700 hover:bg-blue-800'
                     }`}
                   >
                     Continue{selectedCount > 0 ? ` (${selectedCount})` : ''}
                   </button>
                 </div>
               )}
-            </div>
+            </AppCard>
           </>
         ) : (
           <>
             {/* Uploaded Files List */}
-            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <AppCard className="overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-800">Uploaded Files</h2>
                 <p className="mt-1 text-xs text-gray-500">
@@ -475,7 +464,7 @@ function ExistingList() {
                   <div className="mt-5">
                     <button
                       onClick={() => navigate('/file-upload')}
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
                       Upload File
                     </button>
@@ -554,12 +543,12 @@ function ExistingList() {
                   </table>
                 </div>
               )}
-            </div>
+            </AppCard>
           </>
         )}
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 
 export default ExistingList;
+

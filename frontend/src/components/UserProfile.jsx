@@ -4,6 +4,11 @@ import { auth } from '../firebase';
 import { useAuthProtection } from '../hooks/useAuthProtection';
 import SensitiveActionModal from './SensitiveActionModal';
 import LogoutButton from './LogoutButton';
+import WorkspaceHeader from './WorkspaceHeader';
+import AppCard from './ui/AppCard';
+import AppAlert from './ui/AppAlert';
+import AppButton from './ui/AppButton';
+import PageLayout from './ui/PageLayout';
 
 function UserProfile() {
   const navigate = useNavigate();
@@ -37,9 +42,15 @@ function UserProfile() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="bg-white shadow rounded-lg overflow-hidden">
+    <>
+      <PageLayout shellClassName="shell-md">
+        <WorkspaceHeader
+          title="User Profile"
+          subtitle="Manage account settings, security actions, and your active session."
+          backFallback="/welcome"
+        />
+
+        <AppCard className="overflow-hidden">
           <div className="px-4 py-5 sm:px-6 bg-gradient-to-r from-blue-600 to-indigo-700">
             <h1 className="text-2xl font-bold text-white">User Profile</h1>
             <p className="mt-1 text-blue-100">Manage your account settings and security</p>
@@ -47,13 +58,12 @@ function UserProfile() {
           
           <div className="px-4 py-5 sm:p-6">
             {message && (
-              <div className={`mb-6 p-4 rounded-lg ${
-                message.includes("success") || message.includes("sent") 
-                  ? "bg-green-50 text-green-700 border border-green-200" 
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}>
+              <AppAlert
+                tone={message.includes("success") || message.includes("sent") ? "success" : "error"}
+                className="mb-6"
+              >
                 {message}
-              </div>
+              </AppAlert>
             )}
             
             {/* User Information */}
@@ -82,12 +92,12 @@ function UserProfile() {
                     <h3 className="text-sm font-medium text-gray-900">Change Password</h3>
                     <p className="mt-1 text-sm text-gray-500">Update your password regularly for better security</p>
                   </div>
-                  <button
+                  <AppButton
                     onClick={() => handleSensitiveAction("changePassword")}
-                    className="mt-2 sm:mt-0 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="mt-2 sm:mt-0"
                   >
                     Change
-                  </button>
+                  </AppButton>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-gray-50 rounded-lg p-4">
@@ -95,12 +105,12 @@ function UserProfile() {
                     <h3 className="text-sm font-medium text-gray-900">Change Email</h3>
                     <p className="mt-1 text-sm text-gray-500">Update your email address</p>
                   </div>
-                  <button
+                  <AppButton
                     onClick={() => handleSensitiveAction("changeEmail")}
-                    className="mt-2 sm:mt-0 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    className="mt-2 sm:mt-0"
                   >
                     Change
-                  </button>
+                  </AppButton>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-gray-50 rounded-lg p-4">
@@ -108,12 +118,13 @@ function UserProfile() {
                     <h3 className="text-sm font-medium text-gray-900">Delete Account</h3>
                     <p className="mt-1 text-sm text-gray-500">Permanently delete your account and all data</p>
                   </div>
-                  <button
+                  <AppButton
                     onClick={() => handleSensitiveAction("deleteAccount")}
-                    className="mt-2 sm:mt-0 px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className="mt-2 sm:mt-0"
+                    variant="danger"
                   >
                     Delete
-                  </button>
+                  </AppButton>
                 </div>
               </div>
             </div>
@@ -127,15 +138,16 @@ function UserProfile() {
                   <p className="mt-1 text-sm text-gray-500">Sign out from this device</p>
                 </div>
                 <LogoutButton 
-                  className="mt-2 sm:mt-0 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  className="mt-2 sm:mt-0"
+                  variant="secondary"
                   onLogout={() => navigate("/login")}
                 />
               </div>
             </div>
           </div>
-        </div>
-      </div>
-      
+        </AppCard>
+      </PageLayout>
+
       {/* Sensitive Action Modal */}
       <SensitiveActionModal
         actionType={modalAction}
@@ -143,7 +155,7 @@ function UserProfile() {
         onClose={() => setShowModal(false)}
         onSuccess={handleActionSuccess}
       />
-    </div>
+    </>
   );
 }
 

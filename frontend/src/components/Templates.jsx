@@ -2,6 +2,10 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthProtection } from '../hooks/useAuthProtection';
 import api from '../services/api';
+import WorkspaceHeader from './WorkspaceHeader';
+import AppCard from './ui/AppCard';
+import AppButton from './ui/AppButton';
+import PageLayout from './ui/PageLayout';
 
 function Templates() {
   const navigate = useNavigate();
@@ -318,26 +322,15 @@ function Templates() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Templates</h1>
-            <p className="text-gray-600 mt-1 text-sm">Choose a template to proceed. Sample content is shown below.</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => navigate(-1)}
-              className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded-md text-sm hover:bg-gray-50"
-            >
-              Back
-            </button>
-          </div>
-        </div>
+    <PageLayout shellClassName="shell-lg">
+        <WorkspaceHeader
+          title="Templates"
+          subtitle="Choose a template, add variables, and send messages to selected recipients."
+          backFallback="/existing-list"
+        />
 
         {/* Selected People Summary */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+        <AppCard className="overflow-hidden mb-6">
           <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">Selected People</h2>
             <span className="text-xs text-gray-600">{selected.length} selected</span>
@@ -369,10 +362,10 @@ function Templates() {
               </ul>
             )}
           </div>
-        </div>
+        </AppCard>
 
         {/* WhatsApp Templates */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <AppCard className="overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">WhatsApp Templates</h2>
             <span className="text-xs text-gray-600">{templates.length} available</span>
@@ -399,7 +392,7 @@ function Templates() {
                 >
                   <div className="flex items-start justify-between">
                     <h3 className="text-base font-semibold text-gray-900">{t.name || "(Unnamed)"}</h3>
-                    <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-700">{t.language || "—"}</span>
+                    <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-700">{t.language || "-"}</span>
                   </div>
                   <div className="mt-1 text-[11px] text-gray-500 capitalize flex items-center gap-2">
                     <span>{t.category || ""}</span>
@@ -418,12 +411,12 @@ function Templates() {
                     <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1">
                       {Array.from({ length: t.bodyParamCount }).map((_, i) => (
                         <span key={i} className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-green-50 text-green-700 border border-green-100">
-                          {{1: "₁", 2: "₂", 3: "₃", 4: "₄", 5: "₅", 6: "₆", 7: "₇", 8: "₈", 9: "₉"}[i+1] || (i+1)}
+                          Body {i + 1}
                         </span>
                       ))}
                       {t.headerParamCount > 0 && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-purple-50 text-purple-700 border border-purple-100">
-                          H{{1: "₁", 2: "₂", 3: "₃", 4: "₄", 5: "₅", 6: "₆", 7: "₇", 8: "₈", 9: "₉"}[t.headerParamCount] || t.headerParamCount}
+                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 border border-amber-100">
+                          Header {t.headerParamCount}
                         </span>
                       )}
                     </div>
@@ -432,11 +425,11 @@ function Templates() {
               ))}
             </div>
           )}
-        </div>
+        </AppCard>
 
         {/* Template Preview and Send Form */}
         {selectedTemplate && (
-          <div className="mt-6 bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="mt-6 workspace-card overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">Send Message</h2>
               <button
@@ -675,15 +668,10 @@ function Templates() {
                     )}
                   </div>
                 )}
-                <button
-                  type="button"
+                <AppButton
                   onClick={handleSend}
                   disabled={!canSend}
-                  className={`px-4 py-2 rounded-md font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm ${
-                    !canSend
-                      ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800'
-                  }`}
+                  variant="primary"
                 >
                   {sending ? (
                     <span className="flex items-center">
@@ -694,14 +682,14 @@ function Templates() {
                       Sending...
                     </span>
                   ) : 'Send Message'}
-                </button>
+                </AppButton>
               </div>
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 
 export default Templates;
+

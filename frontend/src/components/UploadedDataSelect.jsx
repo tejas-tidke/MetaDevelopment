@@ -2,10 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthProtection } from '../hooks/useAuthProtection';
+import WorkspaceHeader from './WorkspaceHeader';
+import AppButton from './ui/AppButton';
+import AppCard from './ui/AppCard';
+import AppAlert from './ui/AppAlert';
+import PageLayout from './ui/PageLayout';
 
 function UploadedDataSelect() {
   const navigate = useNavigate();
   const location = useLocation();
+  const fileId = location.state?.fileId;
+  const processedRecords = location.state?.processedRecords || 0;
+  const errorRecords = location.state?.errorRecords || 0;
+  const uploadMessage = location.state?.uploadMessage;
+  const warningDetails = location.state?.warningDetails;
+  const hasWarnings = errorRecords > 0 || Boolean(warningDetails);
   
   // Protect this component from unauthorized access
   useAuthProtection();
@@ -19,9 +30,7 @@ function UploadedDataSelect() {
 
   useEffect(() => {
     const fetchUploadedData = async () => {
-      console.log("Location state in UploadedDataSelect:", location.state);
-      
-      if (!location.state?.fileId) {
+      if (!fileId) {
         setError("No file information found");
         setLoading(false);
         return;
@@ -29,15 +38,10 @@ function UploadedDataSelect() {
 
       try {
         setLoading(true);
-        console.log(`Fetching user details for file ID: ${location.state.fileId}`);
-        
-        // Use the api service instead of direct axios call
-        const response = await api.get(`/files/${location.state.fileId}/user-details`);
-        console.log("API Response in UploadedDataSelect:", response);
+        const response = await api.get(`/files/${fileId}/user-details`);
         
         // Ensure we're working with arrays
         const userData = Array.isArray(response.data.data) ? response.data.data : [];
-        console.log("User data received in UploadedDataSelect:", userData);
         
         setUserDetails(userData);
         setFilteredDetails(userData);
@@ -53,7 +57,7 @@ function UploadedDataSelect() {
     };
 
     fetchUploadedData();
-  }, [location.state?.fileId]);
+  }, [fileId]);
 
   // Filter data based on search term
   useEffect(() => {
@@ -111,47 +115,32 @@ function UploadedDataSelect() {
 
   const getSortIcon = (columnName) => {
     if (sortConfig.key === columnName) {
-      return sortConfig.direction === "asc" ? "↑" : "↓";
+      return sortConfig.direction === "asc" ? "^" : "v";
     }
-    return "↕";
+    return "<>";
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Uploaded Data</h1>
-              <p className="text-gray-600 mt-1">View and manage the data from your recent file upload</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => navigate('/file-upload')}
-                className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-md text-sm font-medium hover:from-blue-700 hover:to-indigo-800 flex items-center"
-              >
-                <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
+    <PageLayout>
+        <WorkspaceHeader
+          title="Uploaded Data"
+          subtitle="Review imported records from your latest file before moving to templates."
+          backFallback="/file-upload"
+          actions={
+            <>
+              <AppButton onClick={() => navigate('/file-upload')} variant="primary">
                 Upload Another
-              </button>
-              <button
-                onClick={() => navigate('/existing-list')}
-                className="px-3 py-1.5 bg-white text-gray-700 rounded-md border border-gray-300 hover:bg-gray-50 text-sm flex items-center"
-              >
-                <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
+              </AppButton>
+              <AppButton onClick={() => navigate('/existing-list')}>
                 View All Data
-              </button>
-            </div>
-          </div>
-        </div>
+              </AppButton>
+            </>
+          }
+        />
 
         {/* Success Message */}
         {location.state?.fileName && (
-          <div className="mb-6 bg-green-50 border border-green-200 p-4 rounded-md">
+          <AppAlert tone={hasWarnings ? "warn" : "success"} className="mb-6">
             <div className="flex items-start">
               <div className="flex-shrink-0">
                 <svg className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
@@ -159,17 +148,24 @@ function UploadedDataSelect() {
                 </svg>
               </div>
               <div className="ml-2">
-                <h3 className="text-sm font-medium text-green-800">File Uploaded Successfully!</h3>
+                <h3 className="text-sm font-medium text-green-800">
+                  {hasWarnings ? "File Uploaded with Warnings" : "File Uploaded Successfully!"}
+                </h3>
                 <div className="mt-1 text-green-700 text-xs">
                   <p>
-                    File "<span className="font-semibold">{location.state.fileName}</span>" has been processed.
-                    {location.state.processedRecords > 0 && ` ${location.state.processedRecords} records imported.`}
-                    {location.state.errorRecords > 0 && ` ${location.state.errorRecords} records had errors.`}
+                    {uploadMessage || (
+                      <>
+                        File "<span className="font-semibold">{location.state.fileName}</span>" has been processed.
+                        {processedRecords > 0 && ` ${processedRecords} records imported.`}
+                        {errorRecords > 0 && ` ${errorRecords} rows were skipped.`}
+                      </>
+                    )}
                   </p>
+                  {warningDetails && <p className="mt-1 break-words">{warningDetails}</p>}
                 </div>
               </div>
             </div>
-          </div>
+          </AppAlert>
         )}
 
         {/* Stats Cards */}
@@ -197,7 +193,7 @@ function UploadedDataSelect() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Processed</p>
-                <p className="text-lg font-bold text-gray-900">{location.state?.processedRecords || 0}</p>
+                <p className="text-lg font-bold text-gray-900">{processedRecords}</p>
               </div>
             </div>
           </div>
@@ -211,14 +207,14 @@ function UploadedDataSelect() {
               </div>
               <div>
                 <p className="text-xs text-gray-500">Errors</p>
-                <p className="text-lg font-bold text-gray-900">{location.state?.errorRecords || 0}</p>
+                <p className="text-lg font-bold text-gray-900">{errorRecords}</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Data Table */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <AppCard className="overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Uploaded User Details</h2>
@@ -338,22 +334,22 @@ function UploadedDataSelect() {
               </p>
             </div>
           )}
-        </div>
+        </AppCard>
         
         {/* Continue Button */}
         {location.state?.fileId && filteredDetails.length > 0 && (
           <div className="mt-6 flex justify-end">
-            <button
+            <AppButton
               onClick={() => navigate('/templates', { state: { fileId: location.state.fileId } })}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-md font-medium hover:from-blue-700 hover:to-indigo-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              variant="primary"
             >
               Continue to Templates
-            </button>
+            </AppButton>
           </div>
         )}
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 
 export default UploadedDataSelect;
+

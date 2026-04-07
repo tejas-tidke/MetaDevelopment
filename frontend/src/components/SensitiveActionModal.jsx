@@ -124,14 +124,14 @@ function SensitiveActionModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">{getTitle()}</h3>
+    <div className="auth-modal-backdrop">
+      <div className="auth-modal">
+        <div>
+          <div className="auth-modal-head">
+            <h3>{getTitle()}</h3>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-500 focus:outline-none"
+              className="auth-modal-close"
             >
               <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -139,12 +139,12 @@ function SensitiveActionModal({
             </button>
           </div>
           
-          <p className="text-sm text-gray-500 mb-4">{getDescription()}</p>
+          <p className="text-sm text-gray-600 mb-4">{getDescription()}</p>
           
           <form onSubmit={handleSubmit}>
             {/* Password field */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="auth-label">
                 Current Password
               </label>
               <input
@@ -154,7 +154,7 @@ function SensitiveActionModal({
                   setPassword(e.target.value);
                   if (message) setMessage("");
                 }}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="auth-input"
                 placeholder="Enter your current password"
               />
             </div>
@@ -162,7 +162,7 @@ function SensitiveActionModal({
             {/* New email field (for email change) */}
             {actionType === "changeEmail" && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="auth-label">
                   New Email
                 </label>
                 <input
@@ -172,7 +172,7 @@ function SensitiveActionModal({
                     setNewEmail(e.target.value);
                     if (message) setMessage("");
                   }}
-                  className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="auth-input"
                   placeholder="Enter new email address"
                 />
               </div>
@@ -182,7 +182,7 @@ function SensitiveActionModal({
             {actionType === "changePassword" && (
               <>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="auth-label">
                     New Password
                   </label>
                   <input
@@ -192,13 +192,13 @@ function SensitiveActionModal({
                       setNewPassword(e.target.value);
                       if (message) setMessage("");
                     }}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="auth-input"
                     placeholder="Enter new password"
                   />
                 </div>
                 
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="auth-label">
                     Confirm New Password
                   </label>
                   <input
@@ -208,7 +208,7 @@ function SensitiveActionModal({
                       setConfirmPassword(e.target.value);
                       if (message) setMessage("");
                     }}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="auth-input"
                     placeholder="Confirm new password"
                   />
                 </div>
@@ -216,34 +216,24 @@ function SensitiveActionModal({
             )}
             
             {message && (
-              <div
-                className={`mb-4 p-3 rounded-lg text-sm font-medium text-center ${
-                  message.includes("success")
-                    ? "bg-green-50 text-green-700 border border-green-200"
-                    : "bg-red-50 text-red-700 border border-red-200"
-                }`}
-              >
+              <div className={`mb-4 auth-alert ${message.includes("success") ? "success" : "error"}`}>
                 {message}
               </div>
             )}
             
-            <div className="flex justify-end space-x-3">
+            <div className="auth-modal-actions">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isLoading}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                className="auth-btn-muted disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isLoading}
-                className={`px-4 py-2 rounded-lg text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                  isLoading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                }`}
+                className="auth-btn-primary"
               >
                 {isLoading ? "Processing..." : "Confirm"}
               </button>

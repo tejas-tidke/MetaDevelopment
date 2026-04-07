@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthProtection } from '../hooks/useAuthProtection';
+import WorkspaceHeader from './WorkspaceHeader';
+import AppButton from './ui/AppButton';
+import AppCard from './ui/AppCard';
+import AppAlert from './ui/AppAlert';
+import PageLayout from './ui/PageLayout';
 
 function FileUpload() {
   const navigate = useNavigate();
@@ -102,18 +107,29 @@ function FileUpload() {
         },
       });
 
+      const responseData = response.data || {};
+      const uploadedFile = responseData.file || {};
+      const processedRecords = uploadedFile.processedRecords || 0;
+      const errorRecords = uploadedFile.errorRecords || 0;
+      const uploadMessage =
+        responseData.message ||
+        `File processed: ${processedRecords} records imported and ${errorRecords} rows skipped.`;
+      const warningDetails = responseData.warnings || uploadedFile.errorMessage || '';
+
       setUploadProgress(100);
-      setMessage('File uploaded successfully! Processing data...');
+      setMessage(uploadMessage);
       
       // Give some time for the backend to process the file
       setTimeout(() => {
         // Navigate to the uploaded-data page instead of templates page
         navigate('/uploaded-data', { 
           state: { 
-            fileId: response.data.file.id,
+            fileId: uploadedFile.id,
             fileName: file.name,
-            processedRecords: response.data.file.processedRecords || 0,
-            errorRecords: response.data.file.errorRecords || 0
+            processedRecords,
+            errorRecords,
+            uploadMessage,
+            warningDetails
           } 
         });
       }, 1000);
@@ -127,13 +143,15 @@ function FileUpload() {
         // The request was made and the server responded with a status code
         // that falls out of the range of 2xx
         if (error.response.status === 400) {
-          errorMessage = error.response.data || 'Invalid file format';
+          errorMessage = error.response.data?.message || error.response.data || 'Invalid file format';
         } else if (error.response.status === 413) {
           errorMessage = 'File is too large. Maximum size is 5MB';
         } else if (error.response.status === 500) {
-          errorMessage = 'Server error. Please try again later.';
-        } else if (error.response.data) {
+          errorMessage = error.response.data?.message || 'Server error. Please try again later.';
+        } else if (typeof error.response.data === 'string') {
           errorMessage = error.response.data;
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
         }
       } else if (error.request) {
         // The request was made but no response was received
@@ -157,27 +175,15 @@ function FileUpload() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Upload User Data</h1>
-              <p className="text-gray-600 mt-1">Upload a CSV or Excel file containing user details</p>
-            </div>
-            <button
-              onClick={() => navigate(-1)}
-              className="px-3 py-1.5 text-gray-600 hover:text-gray-900 text-sm flex items-center"
-            >
-              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              Back
-            </button>
-          </div>
-        </div>
+    <PageLayout>
+        <WorkspaceHeader
+          title="Upload User Data"
+          subtitle="Upload a CSV or Excel file containing user details."
+          backFallback="/existing-list"
+          actions={<AppButton onClick={() => navigate('/existing-list')}>View All Data</AppButton>}
+        />
         
-        <div className="bg-white rounded-xl shadow-lg p-5">
+        <AppCard className="p-5">
           <div className="space-y-6">
             {/* Drag and Drop Area */}
             <div 
@@ -214,12 +220,9 @@ function FileUpload() {
                 <p className="text-gray-500 text-sm mb-3">
                   {file ? file.name : 'or click to browse files'}
                 </p>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700"
-                >
+                <AppButton type="button" variant="primary">
                   Browse Files
-                </button>
+                </AppButton>
                 <p className="text-xs text-gray-400 mt-3">
                   Supported formats: CSV, XLS, XLSX (Max size: 5MB)
                 </p>
@@ -307,13 +310,7 @@ function FileUpload() {
 
             {/* Status Message */}
             {message && (
-              <div
-                className={`p-3 rounded-md ${
-                  isError
-                    ? 'bg-red-50 border border-red-200'
-                    : 'bg-green-50 border border-green-200'
-                }`}
-              >
+              <AppAlert tone={isError ? "error" : "success"} className="p-3">
                 <div className="flex items-start">
                   <div className="flex-shrink-0">
                     {isError ? (
@@ -352,29 +349,15 @@ function FileUpload() {
                     </p>
                   </div>
                 </div>
-              </div>
+              </AppAlert>
             )}
 
             {/* Action Buttons */}
             <div className="flex justify-end space-x-2">
-              <button
-                type="button"
-                onClick={() => navigate('/existing-list')}
-                className="px-4 py-2 border border-gray-300 rounded-md text-sm text-gray-700 bg-white hover:bg-gray-50"
-                disabled={isUploading}
-              >
+              <AppButton onClick={() => navigate('/existing-list')} disabled={isUploading}>
                 View All Data
-              </button>
-              <button
-                type="button"
-                onClick={handleUpload}
-                disabled={!file || isUploading}
-                className={`px-4 py-2 rounded-md font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 text-sm ${
-                  !file || isUploading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800'
-                }`}
-              >
+              </AppButton>
+              <AppButton onClick={handleUpload} variant="primary" disabled={!file || isUploading}>
                 {isUploading ? (
                   <span className="flex items-center">
                     <svg
@@ -418,10 +401,10 @@ function FileUpload() {
                     Upload File
                   </span>
                 )}
-              </button>
+              </AppButton>
             </div>
           </div>
-        </div>
+        </AppCard>
         
         {/* Info Section */}
         <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -455,8 +438,8 @@ function FileUpload() {
           
           <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
             <div className="flex items-center mb-2">
-              <div className="bg-purple-100 p-1.5 rounded-md mr-2">
-                <svg className="h-5 w-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <div className="bg-amber-100 p-1.5 rounded-md mr-2">
+                <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </div>
@@ -467,8 +450,7 @@ function FileUpload() {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+    </PageLayout>
   );
 }
 
