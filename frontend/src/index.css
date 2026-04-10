@@ -4,7 +4,9 @@
 
 /* Minimal overrides - don't force global flex on body */
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  --app-font-family: "Atlassian Sans", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --app-font-display: var(--app-font-family);
+  font-family: var(--app-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -15,4 +17,5 @@ body {
   min-height: 100vh;
   background-color: #f8fafc; /* light background */
   color: #111827;
+  font-family: var(--app-font-family);
 }

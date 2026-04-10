@@ -69,6 +69,12 @@ function Templates() {
     }));
   };
 
+  const countTemplatePlaceholders = (text) => {
+    if (!text) return 0;
+    const matches = text.match(/\{\{\s*[^{}]+\s*}}/g);
+    return matches ? matches.length : 0;
+  };
+
   // Prefer users passed from ExistingList; fallback to file-based users when fileId is provided.
   useEffect(() => {
     if (Array.isArray(selectedFromState) && selectedFromState.length > 0) {
@@ -124,7 +130,8 @@ function Templates() {
     setHeaderMediaFile(null);
     setPreviewUrl("");
     // Initialize body params length
-    const cnt = Number(selectedTemplate?.bodyParamCount || 0);
+    const declaredCount = Number(selectedTemplate?.bodyParamCount || 0);
+    const cnt = declaredCount > 0 ? declaredCount : countTemplatePlaceholders(selectedTemplate?.body || "");
     // If personalization is enabled, we don't need the first parameter (it will be auto-filled with user's name)
     const adjustedCount = personalizeWithUserData && cnt > 0 ? cnt - 1 : cnt;
     setBodyParams(Array.from({ length: adjustedCount }, () => ""));
@@ -179,7 +186,11 @@ function Templates() {
     .filter(p => p.length > 0);
 
   const headerFormat = (selectedTemplate?.headerFormat || "").toUpperCase();
-  const bodyParamCount = Number(selectedTemplate?.bodyParamCount || 0);
+  const bodyParamCount = (() => {
+    const declaredCount = Number(selectedTemplate?.bodyParamCount || 0);
+    if (declaredCount > 0) return declaredCount;
+    return countTemplatePlaceholders(selectedTemplate?.body || "");
+  })();
   const headerParamCount = Number(selectedTemplate?.headerParamCount || 0);
   const templateButtons = getTemplateButtons(selectedTemplate);
   const dynamicButtons = templateButtons.filter((button) => (button.paramCount || 0) > 0);
@@ -205,6 +216,94 @@ function Templates() {
     return values.length === button.paramCount && values.every((value) => (value || "").trim().length > 0);
   });
   const canSend = !!selectedTemplate && recipients.length > 0 && headerOk && bodyOk && buttonsOk && !sending;
+
+  const resolveUrlTemplate = (urlTemplate, values = []) => {
+    if (!urlTemplate) return "";
+    let valueCursor = 0;
+    return urlTemplate.replace(/\{\{\d+}}/g, () => {
+      const replacement = (values[valueCursor] || "").trim();
+      valueCursor += 1;
+      return replacement || "{{value}}";
+    });
+  };
+
+  const previewBodyText = (() => {
+    const rawBody = selectedTemplate?.body || "";
+    if (!rawBody) return "(No body)";
+    return rawBody.replace(/\{\{(\d+)}}/g, (_, placeholderIndex) => {
+      const numericIndex = Number(placeholderIndex);
+      if (!Number.isFinite(numericIndex) || numericIndex < 1) {
+        return `{{${placeholderIndex}}}`;
+      }
+
+      if (personalizeWithUserData && numericIndex === 1) {
+        return "{{Name}}";
+      }
+
+      const bodyInputIndex = personalizeWithUserData ? numericIndex - 2 : numericIndex - 1;
+      const value = (bodyParams[bodyInputIndex] || "").trim();
+      return value || `{{${numericIndex}}}`;
+    });
+  })();
+
+  const previewHeaderText = (() => {
+    if (!selectedTemplate) return "";
+    if (headerFormat === "TEXT") {
+      if (hasDynamicTextHeader) {
+        return headerText.trim() || "{{header}}";
+      }
+      return (selectedTemplate.headerText || "").trim();
+    }
+    if (headerFormat === "IMAGE") {
+      return "";
+    }
+    if (headerFormat) {
+      return `${headerFormat} HEADER`;
+    }
+    return "";
+  })();
+
+  const previewButtons = templateButtons.map((button) => {
+    const key = toButtonInputKey(button);
+    const dynamicValues = (buttonParamInputs[key] || []).map((v) => (v || "").trim());
+    return {
+      ...button,
+      resolvedUrl: button.url ? resolveUrlTemplate(button.url, dynamicValues) : ""
+    };
+  });
+
+  const previewTime = new Intl.DateTimeFormat("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(new Date());
+
+  const toFriendlySendError = (rawError) => {
+    const msg = (rawError || "").toString();
+    const lower = msg.toLowerCase();
+
+    if (
+      lower.includes("number of localizable_params") ||
+      lower.includes("does not match the expected number of params") ||
+      lower.includes("number of parameters does not match")
+    ) {
+      return "Template variables are incomplete. Please fill all required fields and try again.";
+    }
+    if (lower.includes("401 unauthorized") || lower.includes("auth_failed") || lower.includes("authentication failed")) {
+      return "WhatsApp authentication failed. Please reconnect your WhatsApp access token.";
+    }
+    if (lower.includes("rate limit")) {
+      return "Too many requests were sent quickly. Please wait a moment and try again.";
+    }
+    if (lower.includes("unsupported post request") || lower.includes("phone-number-id")) {
+      return "WhatsApp account configuration looks incorrect. Please verify your phone number setup.";
+    }
+    if (lower.includes("recipient") && lower.includes("invalid")) {
+      return "One or more recipient phone numbers are invalid.";
+    }
+
+    return "Unable to send message right now. Please check your template inputs and try again.";
+  };
 
   // First, let's update the header parameters in the handleSend function
   const handleSend = async () => {
@@ -250,13 +349,9 @@ function Templates() {
           }
         } catch (error) {
           console.error('Error uploading file:', error);
-          const backendMessage =
-            error.response?.data?.details ||
-            error.response?.data?.message ||
-            error.message;
           setSendResult({
             status: 'error',
-            message: `Failed to upload image: ${backendMessage}`
+            message: "Could not upload image. Please try again."
           });
           setSending(false);
           return;
@@ -386,30 +481,35 @@ function Templates() {
       const firstError = Array.isArray(res.data.errors) && res.data.errors.length > 0
         ? res.data.errors[0]
         : null;
-      const errorHint = firstError
-        ? ` First error: ${firstError.error || "Unknown error"}`
-        : "";
+      const userHint = firstError
+        ? toFriendlySendError(firstError.userMessage || firstError.error || "")
+        : "Some messages could not be delivered.";
       setSendResult({
         status: 'partial_success',
-        message: `Partially sent: ${res.data.sent} successful, ${res.data.failed} failed.${errorHint}`
+        message: `Partially sent: ${res.data.sent} successful, ${res.data.failed} failed. ${userHint}`
       });
     } else {
       const firstError = Array.isArray(res.data?.errors) && res.data.errors.length > 0
         ? res.data.errors[0]
         : null;
-      const fallback = res.data?.message || "Failed to send message";
-      const errorHint = firstError
-        ? ` First error: ${firstError.error || "Unknown error"}`
-        : "";
+      const fallback = res.data?.message || "";
+      const userMessage = firstError
+        ? toFriendlySendError(firstError.userMessage || firstError.error || "")
+        : toFriendlySendError(fallback);
       setSendResult({
         status: "error",
-        message: `${fallback}.${errorHint}`
+        message: userMessage
       });
     }
     } catch (e) {
+      const rawError =
+        e?.response?.data?.errors?.[0]?.userMessage ||
+        e?.response?.data?.errors?.[0]?.error ||
+        e?.response?.data?.message ||
+        e?.message;
       setSendResult({ 
         status: "error", 
-        message: e.response?.data?.message || e.message || "Failed to send message" 
+        message: toFriendlySendError(rawError)
       });
       console.error("Send error:", e.response?.data || e);
     } finally {
@@ -418,15 +518,15 @@ function Templates() {
   };
 
   return (
-    <PageLayout className="h-screen overflow-hidden" shellClassName="shell-lg h-full flex flex-col">
+    <PageLayout className="h-screen overflow-hidden" shellClassName="shell-xl h-full flex flex-col">
         <WorkspaceHeader
           title="Templates"
           subtitle="Choose a template, add variables, and send messages to selected recipients."
           backFallback="/existing-list"
         />
 
-        <div className="min-h-0 flex-1 pb-6 grid grid-cols-1 xl:grid-cols-10 gap-4">
-          <AppCard className="h-full overflow-hidden flex flex-col xl:col-span-3">
+        <div className="min-h-0 flex-1 pb-6 grid grid-cols-1 xl:grid-cols-12 gap-4">
+          <AppCard className="overflow-hidden flex flex-col self-start xl:col-span-3">
             <div className="px-5 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-800">Selected People</h2>
               <p className="mt-1 text-xs text-gray-500">
@@ -434,7 +534,7 @@ function Templates() {
               </p>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div className="p-4">
               {selected.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-3">
                   <p className="text-sm text-gray-600">
@@ -467,10 +567,11 @@ function Templates() {
             </div>
           </AppCard>
 
-          <div className="min-h-0 h-full overflow-auto xl:col-span-7 pr-1">
+          <div className="min-h-0 h-full overflow-auto xl:col-span-9 pr-1">
+        <div className={`grid grid-cols-1 ${selectedTemplate ? "xl:grid-cols-[1.4fr_1fr]" : ""} gap-4 items-start`}>
 
         {/* WhatsApp Templates */}
-        <AppCard className="overflow-hidden">
+        <AppCard className={`overflow-hidden ${selectedTemplate ? "h-full" : ""}`}>
           <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">WhatsApp Templates</h2>
             <span className="text-xs text-gray-600">{templates.length} available</span>
@@ -539,7 +640,7 @@ function Templates() {
 
         {/* Template Preview and Send Form */}
         {selectedTemplate && (
-          <div className="mt-6 workspace-card overflow-hidden">
+          <div className="workspace-card overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">Send Message</h2>
               <button
@@ -553,50 +654,84 @@ function Templates() {
             </div>
             
             <div className="p-5">
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="mb-6">
                 <div className="text-sm font-medium text-gray-900 mb-2">Template Preview</div>
-                <div className="text-sm text-gray-700 whitespace-pre-wrap">{selectedTemplate.body || "(No body)"}</div>
-                {selectedTemplate.headerFormat && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    Header format: {selectedTemplate.headerFormat}
-                  </div>
-                )}
-                {selectedTemplate.footer && (
-                  <div className="mt-2 text-xs text-gray-500">
-                    Footer: {selectedTemplate.footer}
-                  </div>
-                )}
-                {templateButtons.length > 0 && (
-                  <div className="mt-3">
-                    <div className="text-xs font-medium text-gray-700 mb-2">Buttons</div>
-                    <div className="flex flex-wrap gap-2">
-                      {templateButtons.map((button) => (
-                        <span
-                          key={`${button.index}-${button.type}`}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md bg-white border border-indigo-100 text-indigo-700"
-                        >
-                          <span className="font-semibold">{button.text || `Button ${button.index + 1}`}</span>
-                          <span className="uppercase">({button.type || "BUTTON"})</span>
-                          {button.paramCount > 0 && <span>var: {button.paramCount}</span>}
-                        </span>
-                      ))}
-                    </div>
-                    {templateButtons.some((button) => button.url) && (
-                      <div className="mt-2 space-y-1">
-                        {templateButtons
-                          .filter((button) => button.url)
-                          .map((button) => (
-                            <div
-                              key={`button-url-${button.index}`}
-                              className="text-[11px] text-gray-600 break-all"
-                            >
-                              Button {button.index + 1} URL: {button.url}
+                <div
+                  className="rounded-2xl border border-gray-200 p-3"
+                  style={{
+                    backgroundColor: "#e9e4dd",
+                    backgroundImage:
+                      "radial-gradient(circle at 20% 20%, rgba(0,0,0,0.04) 1px, transparent 1px), radial-gradient(circle at 80% 80%, rgba(0,0,0,0.035) 1px, transparent 1px)",
+                    backgroundSize: "18px 18px, 22px 22px"
+                  }}
+                >
+                  <div className="mx-auto max-w-[320px] rounded-[12px] border border-[#d7d7d7] bg-[#f8f8f8] shadow-[0_1px_2px_rgba(0,0,0,0.08)] overflow-hidden">
+                    <div className="px-3 py-3 bg-[#f7f7f7]">
+                      {headerFormat === "IMAGE" && (
+                        <div className="mb-3 rounded-md overflow-hidden border border-slate-200 bg-white">
+                          {previewUrl ? (
+                            <img
+                              src={previewUrl}
+                              alt="Template header preview"
+                              className="w-full max-h-56 object-contain bg-white"
+                            />
+                          ) : (
+                            <div className="h-36 flex items-center justify-center text-[12px] text-slate-500 px-3 text-center">
+                              {mediaId.trim()
+                                ? "Image selected via Media ID. Upload image file to see preview."
+                                : "Upload an image to preview header."}
                             </div>
-                          ))}
+                          )}
+                        </div>
+                      )}
+
+                      <div className="text-[14px] leading-7 text-[#1f2937] whitespace-pre-line">
+                        {previewHeaderText ? `${previewHeaderText}\n\n${previewBodyText}` : previewBodyText}
+                      </div>
+                      <div className="mt-2 flex items-end justify-between text-[12px] text-[#7b8490]">
+                        <span className="truncate pr-2">{selectedTemplate.footer || ""}</span>
+                        <span className="shrink-0">{previewTime}</span>
+                      </div>
+                    </div>
+
+                    {previewButtons.length > 0 && (
+                      <div className="border-t border-[#d5d5d5] bg-[#f7f7f7] divide-y divide-[#e0e0e0]">
+                        {previewButtons.map((button) => (
+                          <button
+                            key={`preview-button-${button.index}`}
+                            type="button"
+                            className="w-full px-3 py-2 flex items-center justify-center gap-2 text-[#1185e0] hover:bg-[#f1f1f1] transition-colors"
+                            title={button.resolvedUrl || button.url || ""}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5h5m0 0v5m0-5L10 14" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12v7h7" />
+                            </svg>
+                            <span className="text-[16px] font-medium leading-none">
+                              {button.text || `Button ${button.index + 1}`}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
+                </div>
+
+                {previewButtons.some((button) => button.url) && (
+                  <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <div className="text-[11px] font-medium text-slate-700 mb-1">Button URL(s)</div>
+                    <div className="space-y-1">
+                      {previewButtons
+                        .filter((button) => button.url)
+                        .map((button) => (
+                          <div key={`preview-url-${button.index}`} className="text-[11px] text-slate-600 break-all">
+                            Button {button.index + 1}: {button.resolvedUrl || button.url}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
                 )}
+
                 {headerFormat === "TEXT" && headerParamCount === 0 && (
                   <div className="mt-2 text-xs text-emerald-700">
                     This template uses a fixed header. No header input is required.
@@ -870,6 +1005,7 @@ function Templates() {
             </div>
           </div>
         )}
+        </div>
           </div>
         </div>
 

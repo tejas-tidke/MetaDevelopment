@@ -133,6 +133,20 @@ public class WabaTemplatesController {
                     item.put("footer", footerText);
                     item.put("buttons", buttons);
                     item.put("buttonCount", buttons.size());
+
+                    Map<String, Object> previewHeader = new HashMap<>();
+                    previewHeader.put("format", headerFormat);
+                    if (!headerText.isEmpty()) {
+                        previewHeader.put("text", headerText);
+                    }
+
+                    Map<String, Object> preview = new HashMap<>();
+                    preview.put("header", previewHeader);
+                    preview.put("body", bodyText);
+                    preview.put("footer", footerText);
+                    preview.put("buttons", buttons);
+                    item.put("preview", preview);
+
                     templates.add(item);
                 }
             }
@@ -153,7 +167,8 @@ public class WabaTemplatesController {
 
     private int countPlaceholders(String text) {
         if (text == null || text.isEmpty()) return 0;
-        Pattern p = Pattern.compile("\\{\\{\\d+}}");
+        // Count both numbered placeholders ({{1}}) and named placeholders ({{customer_name}}).
+        Pattern p = Pattern.compile("\\{\\{\\s*[^{}]+\\s*}}");
         Matcher m = p.matcher(text);
         int count = 0;
         while (m.find()) count++;

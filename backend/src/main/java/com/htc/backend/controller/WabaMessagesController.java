@@ -13,6 +13,10 @@ import org.springframework.core.ParameterizedTypeReference;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.Locale;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/waba")
@@ -98,6 +102,9 @@ public class WabaMessagesController {
         System.out.println("Using Access Token: " + (accessToken != null ? accessToken.substring(0, Math.min(20, accessToken.length())) + "..." : "NO")); // Log token status (truncated for security)
         System.out.println("Using Phone Number ID: " + phoneNumberId); // Log phone number ID
         System.out.println("Using Business Account ID: " + businessAccountId); // Log business account ID
+        TemplateVariableSpec templateVariableSpec = fetchTemplateVariableSpec(req.templateName, req.language);
+        System.out.println("Template variable format: " + (templateVariableSpec.namedFormat ? "NAMED" : "POSITIONAL") +
+            ", body param names: " + templateVariableSpec.bodyParameterNames);
 
         int sent = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
@@ -272,6 +279,7 @@ public class WabaMessagesController {
                 }
                 
                 System.out.println("Processing body parameters: " + paramsCopy);
+                int bodyParamIndex = 0;
                 
                 for (Object param : paramsCopy) {
                     Map<String, Object> paramMap = new HashMap<>();
@@ -282,12 +290,34 @@ public class WabaMessagesController {
                     } else if (param instanceof Map) {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> p = (Map<String, Object>) param;
+
+                        // Skip media-only params accidentally passed in body list.
+                        if (!p.containsKey("text") && (p.containsKey("image") || p.containsKey("video") || p.containsKey("document"))) {
+                            continue;
+                        }
+
                         paramMap.put("text", p.getOrDefault("text", ""));
+
+                        Object parameterName = p.get("parameter_name");
+                        if (parameterName == null) {
+                            parameterName = p.get("param_name");
+                        }
+                        if (parameterName != null && !String.valueOf(parameterName).isBlank()) {
+                            paramMap.put("parameter_name", String.valueOf(parameterName).trim());
+                        }
                     } else {
                         paramMap.put("text", String.valueOf(param));
                     }
+
+                    if (!paramMap.containsKey("parameter_name") && templateVariableSpec.namedFormat) {
+                        String inferredParamName = templateVariableSpec.getBodyParamNameAt(bodyParamIndex);
+                        if (inferredParamName != null && !inferredParamName.isBlank()) {
+                            paramMap.put("parameter_name", inferredParamName);
+                        }
+                    }
                     
                     bodyParams.add(paramMap);
+                    bodyParamIndex++;
                 }
             }
             
@@ -304,7 +334,7 @@ public class WabaMessagesController {
                     
                     // Look for {{1}} or "1" in ALL parameters and replace
                     System.out.println("Checking ALL parameters for personalization:");
-                    replacePlaceholdersInAllParameters(components, bodyParams, userDetails.getName());
+                    replacePlaceholdersInAllParameters(components, bodyParams, userDetails);
                 } else {
                     System.out.println("No user found for phone number: " + to);
                     // List all users for debugging
@@ -368,7 +398,7 @@ public class WabaMessagesController {
                 System.out.println("Final template structure: " + template);
                 System.out.println("Template components: " + template.get("components"));
                 System.out.println("URL: " + url);
-                System.out.println("Headers: " + headers);
+                System.out.println("Headers: [Authorization: Bearer ***REDACTED***, Content-Type: application/json]");
                 System.out.println("=== END WHATSAPP API REQUEST DEBUG ===");
                 
                 HttpEntity<Map<String, Object>> request = new HttpEntity<>(payload, headers);
@@ -1139,49 +1169,127 @@ public class WabaMessagesController {
         }
     }
 
-    // Helper method to replace placeholders in all parameters
-    private void replacePlaceholdersInAllParameters(List<Map<String, Object>> components, List<Map<String, Object>> bodyParams, String userName) {
-        System.out.println("Replacing placeholders with user name: " + userName);
-        
-        // Check body parameters
-        System.out.println("Body parameters before replacement: " + bodyParams);
-        for (Map<String, Object> param : bodyParams) {
-            String text = (String) param.get("text");
-            if (text != null) {
-                System.out.println("Checking body param text: " + text);
-                if ("{{1}}".equals(text)) {
-                    param.put("text", userName);
-                    System.out.println("Replaced {{1}} with: " + userName);
-                } else if ("1".equals(text)) {
-                    param.put("text", userName);
-                    System.out.println("Replaced 1 with: " + userName);
-                }
-            }
+    // Helper method to replace placeholders in all parameters using user details.
+    // Supports patterns like: {{1}}, {{name}}, {{customer_name}}, name, customer_name, etc.
+    private void replacePlaceholdersInAllParameters(List<Map<String, Object>> components, List<Map<String, Object>> bodyParams, UserDetails userDetails) {
+        if (userDetails == null) {
+            return;
         }
-        System.out.println("Body parameters after replacement: " + bodyParams);
-        
-        // Check component parameters
-        System.out.println("Components before replacement: " + components);
+
+        Map<String, String> replacements = buildUserReplacementMap(userDetails);
+        if (replacements.isEmpty()) {
+            return;
+        }
+
+        System.out.println("Applying user personalization tokens: " + replacements.keySet());
+
+        for (Map<String, Object> param : bodyParams) {
+            applyReplacementToParameterMap(param, replacements);
+        }
+
         for (Map<String, Object> component : components) {
             Object parametersObj = component.get("parameters");
-            if (parametersObj instanceof List) {
-                List<Map<String, Object>> params = (List<Map<String, Object>>) parametersObj;
-                for (Map<String, Object> param : params) {
-                    String text = (String) param.get("text");
-                    if (text != null) {
-                        System.out.println("Checking component param text: " + text);
-                        if ("{{1}}".equals(text)) {
-                            param.put("text", userName);
-                            System.out.println("Replaced {{1}} with: " + userName);
-                        } else if ("1".equals(text)) {
-                            param.put("text", userName);
-                            System.out.println("Replaced 1 with: " + userName);
-                        }
-                    }
+            if (!(parametersObj instanceof List<?>)) {
+                continue;
+            }
+
+            for (Object paramObj : (List<?>) parametersObj) {
+                if (!(paramObj instanceof Map<?, ?>)) {
+                    continue;
                 }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> paramMap = (Map<String, Object>) paramObj;
+                applyReplacementToParameterMap(paramMap, replacements);
             }
         }
-        System.out.println("Components after replacement: " + components);
+    }
+
+    private void applyReplacementToParameterMap(Map<String, Object> param, Map<String, String> replacements) {
+        if (param == null || param.isEmpty()) {
+            return;
+        }
+
+        replaceStringField(param, "text", replacements);
+        replaceStringField(param, "payload", replacements);
+        replaceStringField(param, "coupon_code", replacements);
+    }
+
+    private void replaceStringField(Map<String, Object> param, String fieldName, Map<String, String> replacements) {
+        Object rawValue = param.get(fieldName);
+        if (!(rawValue instanceof String)) {
+            return;
+        }
+
+        String originalValue = (String) rawValue;
+        String resolvedValue = resolveDynamicTokenValue(originalValue, replacements);
+        if (!Objects.equals(originalValue, resolvedValue)) {
+            param.put(fieldName, resolvedValue);
+            System.out.println("Resolved " + fieldName + " token: '" + originalValue + "' -> '" + resolvedValue + "'");
+        }
+    }
+
+    private String resolveDynamicTokenValue(String input, Map<String, String> replacements) {
+        if (input == null || input.isBlank() || replacements.isEmpty()) {
+            return input;
+        }
+
+        String output = input;
+        String trimmedOutput = output.trim();
+
+        for (Map.Entry<String, String> entry : replacements.entrySet()) {
+            String alias = entry.getKey();
+            String value = entry.getValue();
+            if (alias == null || alias.isBlank() || value == null || value.isBlank()) {
+                continue;
+            }
+
+            // Exact token styles: customer_name OR {{customer_name}} OR {{ customer_name }}
+            String exactBracesPattern = "(?i)^\\{\\{\\s*" + Pattern.quote(alias) + "\\s*}}$";
+            if (trimmedOutput.equalsIgnoreCase(alias) || trimmedOutput.matches(exactBracesPattern)) {
+                return value;
+            }
+
+            // Inline replacement style: "Hello {{customer_name}}"
+            String inlinePattern = "(?i)\\{\\{\\s*" + Pattern.quote(alias) + "\\s*}}";
+            output = output.replaceAll(inlinePattern, Matcher.quoteReplacement(value));
+        }
+
+        return output;
+    }
+
+    private Map<String, String> buildUserReplacementMap(UserDetails userDetails) {
+        Map<String, String> replacements = new LinkedHashMap<>();
+
+        putReplacementAliases(replacements, userDetails.getName(), Arrays.asList(
+            "1", "name", "full_name", "fullname", "customer_name", "customername", "customer"
+        ));
+
+        putReplacementAliases(replacements, userDetails.getPhoneNo(), Arrays.asList(
+            "phone", "phone_no", "phone_number", "mobile", "mobile_no", "contact", "contact_number"
+        ));
+
+        putReplacementAliases(replacements, userDetails.getEmail(), Arrays.asList(
+            "email", "email_id", "mail"
+        ));
+
+        putReplacementAliases(replacements, userDetails.getCompanyName(), Arrays.asList(
+            "company", "company_name", "companyname", "organization", "organisation"
+        ));
+
+        return replacements;
+    }
+
+    private void putReplacementAliases(Map<String, String> replacements, String value, List<String> aliases) {
+        if (value == null || value.isBlank() || aliases == null || aliases.isEmpty()) {
+            return;
+        }
+
+        for (String alias : aliases) {
+            if (alias != null && !alias.isBlank()) {
+                replacements.put(alias, value);
+            }
+        }
     }
     
     // Helper method to process large batches in smaller chunks
@@ -1293,6 +1401,7 @@ public class WabaMessagesController {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
+        TemplateVariableSpec templateVariableSpec = fetchTemplateVariableSpec(req.templateName, req.language);
         
         // Keep track of the last recipient to implement longer delays for consecutive messages to same number
         String lastRecipient = null;
@@ -1345,12 +1454,13 @@ public class WabaMessagesController {
 
             // Build components (simplified version)
             List<Map<String, Object>> components = new ArrayList<>();
+            List<Map<String, Object>> bodyParams = new ArrayList<>();
             
             // Add body component if we have parameters
             if (req.parameters != null && !req.parameters.isEmpty()) {
                 Map<String, Object> bodyComp = new HashMap<>();
                 bodyComp.put("type", "body");
-                List<Map<String, Object>> bodyParams = new ArrayList<>();
+                int bodyParamIndex = 0;
                 
                 for (Object param : req.parameters) {
                     Map<String, Object> paramMap = new HashMap<>();
@@ -1361,12 +1471,33 @@ public class WabaMessagesController {
                     } else if (param instanceof Map) {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> p = (Map<String, Object>) param;
+
+                        if (!p.containsKey("text") && (p.containsKey("image") || p.containsKey("video") || p.containsKey("document"))) {
+                            continue;
+                        }
+
                         paramMap.put("text", p.getOrDefault("text", ""));
+
+                        Object parameterName = p.get("parameter_name");
+                        if (parameterName == null) {
+                            parameterName = p.get("param_name");
+                        }
+                        if (parameterName != null && !String.valueOf(parameterName).isBlank()) {
+                            paramMap.put("parameter_name", String.valueOf(parameterName).trim());
+                        }
                     } else {
                         paramMap.put("text", String.valueOf(param));
                     }
+
+                    if (!paramMap.containsKey("parameter_name") && templateVariableSpec.namedFormat) {
+                        String inferredParamName = templateVariableSpec.getBodyParamNameAt(bodyParamIndex);
+                        if (inferredParamName != null && !inferredParamName.isBlank()) {
+                            paramMap.put("parameter_name", inferredParamName);
+                        }
+                    }
                     
                     bodyParams.add(paramMap);
+                    bodyParamIndex++;
                 }
                 
                 if (!bodyParams.isEmpty()) {
@@ -1376,6 +1507,13 @@ public class WabaMessagesController {
             }
 
             appendButtonComponents(components, req.buttonParameters);
+
+            if (Boolean.TRUE.equals(req.personalizeWithUserData)) {
+                Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(to);
+                userDetailsOpt.ifPresent(userDetails ->
+                    replacePlaceholdersInAllParameters(components, bodyParams, userDetails)
+                );
+            }
             
             if (!components.isEmpty()) {
                 template.put("components", components);
@@ -1421,6 +1559,127 @@ public class WabaMessagesController {
         }
         
         return result;
+    }
+
+    private TemplateVariableSpec fetchTemplateVariableSpec(String templateName, String language) {
+        if (businessAccountId == null || businessAccountId.isBlank() ||
+            accessToken == null || accessToken.isBlank() ||
+            templateName == null || templateName.isBlank()) {
+            return TemplateVariableSpec.empty();
+        }
+
+        try {
+            String encodedTemplateName = URLEncoder.encode(templateName, StandardCharsets.UTF_8);
+            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?name=%s", businessAccountId, encodedTemplateName);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return TemplateVariableSpec.empty();
+            }
+
+            Object dataObj = response.getBody().get("data");
+            if (!(dataObj instanceof List<?> dataList) || dataList.isEmpty()) {
+                return TemplateVariableSpec.empty();
+            }
+
+            Map<?, ?> selectedTemplate = null;
+            for (Object item : dataList) {
+                if (!(item instanceof Map<?, ?> templateMap)) {
+                    continue;
+                }
+                if (language != null && !language.isBlank()) {
+                    Object templateLanguage = templateMap.get("language");
+                    if (templateLanguage != null && language.equalsIgnoreCase(String.valueOf(templateLanguage))) {
+                        selectedTemplate = templateMap;
+                        break;
+                    }
+                } else {
+                    selectedTemplate = templateMap;
+                    break;
+                }
+            }
+
+            if (selectedTemplate == null && dataList.get(0) instanceof Map<?, ?> first) {
+                selectedTemplate = first;
+            }
+            if (selectedTemplate == null) {
+                return TemplateVariableSpec.empty();
+            }
+
+            Object parameterFormatObj = selectedTemplate.get("parameter_format");
+            String parameterFormat = parameterFormatObj != null ? String.valueOf(parameterFormatObj) : "";
+            boolean namedFormat = "NAMED".equalsIgnoreCase(parameterFormat);
+            List<String> bodyNames = new ArrayList<>();
+
+            if (namedFormat) {
+                Object componentsObj = selectedTemplate.get("components");
+                if (componentsObj instanceof List<?> componentsList) {
+                    for (Object componentObj : componentsList) {
+                        if (!(componentObj instanceof Map<?, ?> componentMap)) {
+                            continue;
+                        }
+                        Object componentTypeObj = componentMap.get("type");
+                        String componentType = componentTypeObj != null ? String.valueOf(componentTypeObj) : "";
+                        if (!"BODY".equalsIgnoreCase(componentType)) {
+                            continue;
+                        }
+
+                        Object exampleObj = componentMap.get("example");
+                        if (!(exampleObj instanceof Map<?, ?> exampleMap)) {
+                            continue;
+                        }
+
+                        Object namedParamsObj = exampleMap.get("body_text_named_params");
+                        if (!(namedParamsObj instanceof List<?> namedParamsList)) {
+                            continue;
+                        }
+
+                        for (Object namedParamObj : namedParamsList) {
+                            if (!(namedParamObj instanceof Map<?, ?> namedParamMap)) {
+                                continue;
+                            }
+                            Object paramNameObj = namedParamMap.get("param_name");
+                            if (paramNameObj != null) {
+                                String paramName = String.valueOf(paramNameObj).trim();
+                                if (!paramName.isBlank()) {
+                                    bodyNames.add(paramName);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            return new TemplateVariableSpec(namedFormat, bodyNames);
+        } catch (Exception e) {
+            System.out.println("Could not fetch template variable spec: " + e.getMessage());
+            return TemplateVariableSpec.empty();
+        }
+    }
+
+    private static class TemplateVariableSpec {
+        private final boolean namedFormat;
+        private final List<String> bodyParameterNames;
+
+        private TemplateVariableSpec(boolean namedFormat, List<String> bodyParameterNames) {
+            this.namedFormat = namedFormat;
+            this.bodyParameterNames = bodyParameterNames != null ? bodyParameterNames : Collections.emptyList();
+        }
+
+        private static TemplateVariableSpec empty() {
+            return new TemplateVariableSpec(false, Collections.emptyList());
+        }
+
+        private String getBodyParamNameAt(int index) {
+            if (index < 0 || index >= bodyParameterNames.size()) {
+                return null;
+            }
+            return bodyParameterNames.get(index);
+        }
     }
 
     // Helper method to find a user by phone number, handling cases where multiple users have the same phone number
