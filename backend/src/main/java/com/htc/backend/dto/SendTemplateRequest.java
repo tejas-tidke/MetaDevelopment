@@ -20,6 +20,9 @@ public class SendTemplateRequest {
     @JsonProperty(value = "parameters", required = false)
     public List<Object> parameters; // Can be String or Map for complex objects
 
+    @JsonProperty(value = "buttonParameters", required = false)
+    public List<Map<String, Object>> buttonParameters; // [{index, subType, parameters:[...]}]
+
     @JsonProperty(value = "headerFormat", required = false)
     public String headerFormat; // one of TEXT, IMAGE, VIDEO, DOCUMENT
     

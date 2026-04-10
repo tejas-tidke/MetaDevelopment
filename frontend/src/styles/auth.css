@@ -84,6 +84,12 @@
   width: min(1220px, 100%);
 }
 
+.auth-shell > .auth-card:only-child {
+  grid-column: 1 / -1;
+  width: min(560px, 100%);
+  margin: 0 auto;
+}
+
 .auth-showcase {
   background: linear-gradient(155deg, #1d4ed8, #4338ca 52%, #1e3a8a);
   border-radius: 28px;

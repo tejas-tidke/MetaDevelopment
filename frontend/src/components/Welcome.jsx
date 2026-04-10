@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import LogoutButton from "./LogoutButton";
 import { useAuthProtection } from "../hooks/useAuthProtection";
+import { logout } from "../services/authService";
 import WorkspaceHeader from "./WorkspaceHeader";
 import AppButton from "./ui/AppButton";
 import AppCard from "./ui/AppCard";
@@ -9,9 +9,42 @@ import PageLayout from "./ui/PageLayout";
 
 function Welcome() {
   const navigate = useNavigate();
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
   
   // Protect this component from unauthorized access
   useAuthProtection();
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setIsProfileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      setIsProfileMenuOpen(false);
+      navigate("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   return (
     <PageLayout>
@@ -21,12 +54,15 @@ function Welcome() {
           showBack={false}
           showHome={false}
           actions={
-            <>
-              <AppButton
-                onClick={() => navigate("/profile")}
-                variant="secondary"
-                >
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="relative" ref={profileMenuRef}>
+              <button
+                type="button"
+                className="h-10 w-10 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 flex items-center justify-center shadow-sm"
+                aria-haspopup="menu"
+                aria-expanded={isProfileMenuOpen}
+                onClick={() => setIsProfileMenuOpen((prev) => !prev)}
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -34,23 +70,51 @@ function Welcome() {
                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                   />
                 </svg>
-                Profile
-              </AppButton>
-              <LogoutButton
-                variant="danger"
-                onLogout={() => navigate("/login")}
-              />
-            </>
+              </button>
+
+              {isProfileMenuOpen && (
+                <div className="absolute right-0 mt-2 w-44 bg-white border border-slate-200 rounded-xl shadow-lg py-1.5 z-[70]">
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                    onClick={() => {
+                      setIsProfileMenuOpen(false);
+                      navigate("/profile");
+                    }}
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    View Profile
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50 flex items-center gap-2"
+                    onClick={handleLogout}
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      />
+                    </svg>
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
           }
         />
         
         <div className="h-full flex flex-col items-center justify-center text-center">
           <div className="mb-10">
-            <div className="mx-auto bg-gradient-to-r from-blue-600 to-indigo-700 w-12 h-12 rounded-xl flex items-center justify-center mb-5">
-              <svg className="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-            </div>
             <h1 className="text-2xl font-bold mb-3 text-gray-900">Welcome to the Dashboard!</h1>
             <p className="text-gray-600 max-w-md mx-auto">
               You have successfully logged in. Start managing your data with our powerful tools.
@@ -97,11 +161,7 @@ function Welcome() {
               </div>
             </AppCard>
             
-            <div className="mt-6 text-center">
-              <p className="text-xs text-gray-500">
-                Need help? Check out our <a href="#" className="text-blue-700 hover:text-blue-800">documentation</a> or <a href="#" className="text-blue-700 hover:text-blue-800">contact support</a>.
-              </p>
-            </div>
+            
           </div>
         </div>
     </PageLayout>

@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Welcome from './components/Welcome';
@@ -18,69 +18,76 @@ import "./styles/auth.css";
 import "./styles/workspace.css";
 
 function AppRoutes() {
+  const location = useLocation();
+
   return (
     <div className="app-route-full">
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/" element={<Login />} />
-        <Route
-          path="/welcome"
-          element={
-            <ProtectedRoute>
-              <Welcome />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/templates"
-          element={
-            <ProtectedRoute>
-              <Templates />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/existing-list"
-          element={
-            <ProtectedRoute>
-              <ExistingList />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/file-upload"
-          element={
-            <ProtectedRoute>
-              <FileUpload />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <UserProfile />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/uploaded-data"
-          element={
-            <ProtectedRoute>
-              <UploadedData />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/uploaded-data-select"
-          element={
-            <ProtectedRoute>
-              <UploadedDataSelect />
-            </ProtectedRoute>
-          }
-        />
-      </Routes>
+      <div
+        key={`${location.pathname}${location.search}${location.hash}`}
+        className="route-transition-stage"
+      >
+        <Routes location={location}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/" element={<Login />} />
+          <Route
+            path="/welcome"
+            element={
+              <ProtectedRoute>
+                <Welcome />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/templates"
+            element={
+              <ProtectedRoute>
+                <Templates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/existing-list"
+            element={
+              <ProtectedRoute>
+                <ExistingList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/file-upload"
+            element={
+              <ProtectedRoute>
+                <FileUpload />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <UserProfile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/uploaded-data"
+            element={
+              <ProtectedRoute>
+                <UploadedData />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/uploaded-data-select"
+            element={
+              <ProtectedRoute>
+                <UploadedDataSelect />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </div>
     </div>
   );
 }

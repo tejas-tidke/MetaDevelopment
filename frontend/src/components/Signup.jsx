@@ -11,7 +11,6 @@ import { auth } from "../firebase";
 import { saveUserData } from "../services/authService";
 import Captcha from "./Captcha";
 import AuthLayout from "./ui/AuthLayout";
-import AuthShowcase from "./ui/AuthShowcase";
 import AuthAlert from "./ui/AuthAlert";
 import AuthButton from "./ui/AuthButton";
 import AuthPasswordToggle from "./ui/AuthPasswordToggle";
@@ -268,21 +267,6 @@ function Signup() {
 
   return (
     <AuthLayout>
-      <AuthShowcase
-        title="Build your secure workspace in under a minute."
-        copy="Create your account to manage reusable templates, run uploads, and keep your profile and auth settings in one place."
-        highlights={[
-          "Guided password rules with live status checks",
-          "CAPTCHA verification before account creation",
-          "Email + social sign-up methods in one flow",
-        ]}
-        metrics={[
-          { value: "Fast", label: "One screen onboarding" },
-          { value: "Strong", label: "Password policy enforced" },
-          { value: "Safe", label: "Protected routes by default" },
-        ]}
-      />
-
       <main className="auth-card">
         <div className="auth-card-top">
           <span className="auth-brand-label">Sign Up</span>
@@ -487,13 +471,21 @@ function Signup() {
           </AuthButton>
         </div>
 
-        {message && <AuthAlert tone={isSuccessMessage(message) ? "success" : "error"}>{message}</AuthAlert>}
+        {message && (
+          <AuthAlert
+            tone={isSuccessMessage(message) ? "success" : "error"}
+            title={isSuccessMessage(message) ? "Success" : "Error"}
+            toastKey={message}
+            onClose={() => setMessage("")}
+          >
+            {message}
+          </AuthAlert>
+        )}
 
         <div className="auth-footer">
           <p>
             Already have an account? <Link to="/login">Sign in</Link>
           </p>
-          <small>Copyright {new Date().getFullYear()} Meta Workspace</small>
         </div>
       </main>
     </AuthLayout>

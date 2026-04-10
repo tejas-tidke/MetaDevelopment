@@ -4,6 +4,7 @@ import com.htc.backend.entity.UploadedFile;
 import com.htc.backend.entity.UserDetails;
 import com.htc.backend.repository.UploadedFileRepository;
 import com.htc.backend.repository.UserDetailsRepository;
+import jakarta.annotation.PostConstruct;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -15,6 +16,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -46,6 +48,38 @@ public class FileStorageService {
     @Autowired
     private UserDetailsRepository userDetailsRepository;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @PostConstruct
+    public void ensureUserDetailsEmailAllowsDuplicates() {
+        try {
+            List<String> uniqueIndexes = jdbcTemplate.queryForList(
+                    "SELECT DISTINCT INDEX_NAME " +
+                            "FROM INFORMATION_SCHEMA.STATISTICS " +
+                            "WHERE TABLE_SCHEMA = DATABASE() " +
+                            "AND TABLE_NAME = 'user_details' " +
+                            "AND COLUMN_NAME = 'email' " +
+                            "AND NON_UNIQUE = 0 " +
+                            "AND INDEX_NAME <> 'PRIMARY'",
+                    String.class
+            );
+
+            for (String indexName : uniqueIndexes) {
+                if (indexName == null || indexName.trim().isEmpty()) {
+                    continue;
+                }
+                String safeIndexName = indexName.replaceAll("[^A-Za-z0-9_]", "");
+                if (safeIndexName.isEmpty()) {
+                    continue;
+                }
+                jdbcTemplate.execute("ALTER TABLE user_details DROP INDEX `" + safeIndexName + "`");
+            }
+        } catch (Exception e) {
+            System.err.println("Could not adjust user_details.email uniqueness: " + e.getMessage());
+        }
+    }
+
     private static final class ParsedUserRow {
         private final UserDetails userDetails;
         private final long rowNumber;
@@ -53,6 +87,40 @@ public class FileStorageService {
         private ParsedUserRow(UserDetails userDetails, long rowNumber) {
             this.userDetails = userDetails;
             this.rowNumber = rowNumber;
+        }
+    }
+
+    public static final class DuplicateCheckResult {
+        private final int duplicateInFileCount;
+        private final int duplicateInDatabaseCount;
+        private final int totalDuplicates;
+        private final List<String> duplicateDetails;
+
+        public DuplicateCheckResult(
+                int duplicateInFileCount,
+                int duplicateInDatabaseCount,
+                List<String> duplicateDetails
+        ) {
+            this.duplicateInFileCount = duplicateInFileCount;
+            this.duplicateInDatabaseCount = duplicateInDatabaseCount;
+            this.totalDuplicates = duplicateInFileCount + duplicateInDatabaseCount;
+            this.duplicateDetails = duplicateDetails;
+        }
+
+        public int getDuplicateInFileCount() {
+            return duplicateInFileCount;
+        }
+
+        public int getDuplicateInDatabaseCount() {
+            return duplicateInDatabaseCount;
+        }
+
+        public int getTotalDuplicates() {
+            return totalDuplicates;
+        }
+
+        public List<String> getDuplicateDetails() {
+            return duplicateDetails;
         }
     }
 
@@ -89,6 +157,11 @@ public class FileStorageService {
 
     @Transactional
     public UploadedFile processFile(MultipartFile file) throws IOException {
+        return processFile(file, false);
+    }
+
+    @Transactional
+    public UploadedFile processFile(MultipartFile file, boolean keepDuplicates) throws IOException {
         validateFile(file);
 
         UploadedFile uploadedFile = new UploadedFile();
@@ -103,10 +176,10 @@ public class FileStorageService {
 
             ProcessingSummary summary;
             if (file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase().endsWith(".csv")) {
-                summary = processCSVFile(file, uploadedFile);
+                summary = processCSVFile(file, uploadedFile, keepDuplicates);
             } else if (file.getOriginalFilename() != null &&
                     file.getOriginalFilename().toLowerCase().matches(".*\\.(xls|xlsx)$")) {
-                summary = processExcelFile(file, uploadedFile);
+                summary = processExcelFile(file, uploadedFile, keepDuplicates);
             } else {
                 throw new IllegalArgumentException("Unsupported file type");
             }
@@ -124,6 +197,55 @@ public class FileStorageService {
         return uploadedFileRepository.save(uploadedFile);
     }
 
+    public DuplicateCheckResult checkDuplicates(MultipartFile file) throws IOException {
+        validateFile(file);
+
+        ProcessingSummary summary;
+        List<ParsedUserRow> parsedRows = new ArrayList<>();
+
+        if (file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase().endsWith(".csv")) {
+            summary = collectCSVRowsForDuplicateCheck(file, parsedRows);
+        } else if (file.getOriginalFilename() != null &&
+                file.getOriginalFilename().toLowerCase().matches(".*\\.(xls|xlsx)$")) {
+            summary = collectExcelRowsForDuplicateCheck(file, parsedRows);
+        } else {
+            throw new IllegalArgumentException("Unsupported file type");
+        }
+
+        Set<String> candidateEmails = parsedRows.stream()
+                .map(parsedRow -> parsedRow.userDetails.getEmail())
+                .collect(Collectors.toSet());
+
+        Set<String> existingEmails = userDetailsRepository.findAllByEmailIn(candidateEmails).stream()
+                .map(existingUser -> normalizeEmail(existingUser.getEmail()))
+                .collect(Collectors.toSet());
+
+        int dbDuplicateCount = 0;
+        List<String> duplicateDetails = new ArrayList<>();
+
+        if (summary.duplicateCount > 0) {
+            duplicateDetails.addAll(summary.skippedDetails.stream()
+                    .filter(detail -> detail.toLowerCase().contains("duplicate"))
+                    .collect(Collectors.toList()));
+        }
+
+        for (ParsedUserRow parsedRow : parsedRows) {
+            String email = parsedRow.userDetails.getEmail();
+            if (existingEmails.contains(email)) {
+                dbDuplicateCount++;
+                if (duplicateDetails.size() < MAX_SKIPPED_DETAILS) {
+                    duplicateDetails.add("Row " + parsedRow.rowNumber + " (" + email + "): Email already exists");
+                }
+            }
+        }
+
+        return new DuplicateCheckResult(
+                summary.duplicateCount,
+                dbDuplicateCount,
+                duplicateDetails
+        );
+    }
+
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("File cannot be empty");
@@ -139,7 +261,7 @@ public class FileStorageService {
         }
     }
 
-    private ProcessingSummary processCSVFile(MultipartFile file, UploadedFile uploadedFile) throws IOException {
+    private ProcessingSummary processCSVFile(MultipartFile file, UploadedFile uploadedFile, boolean keepDuplicates) throws IOException {
         List<ParsedUserRow> parsedRows = new ArrayList<>();
         Set<String> seenEmailsInFile = new HashSet<>();
         ProcessingSummary summary = new ProcessingSummary();
@@ -174,7 +296,7 @@ public class FileStorageService {
                         continue;
                     }
 
-                    if (!seenEmailsInFile.add(email)) {
+                    if (!keepDuplicates && !seenEmailsInFile.add(email)) {
                         summary.addDuplicate(rowNumber, email, "Duplicate email in uploaded file");
                         continue;
                     }
@@ -192,7 +314,7 @@ public class FileStorageService {
             }
         }
 
-        persistParsedRows(parsedRows, summary);
+        persistParsedRows(parsedRows, summary, keepDuplicates);
         return summary;
     }
 
@@ -204,8 +326,162 @@ public class FileStorageService {
         }
     }
 
-    private ProcessingSummary processExcelFile(MultipartFile file, UploadedFile uploadedFile) throws IOException {
+    private ProcessingSummary processExcelFile(MultipartFile file, UploadedFile uploadedFile, boolean keepDuplicates) throws IOException {
         List<ParsedUserRow> parsedRows = new ArrayList<>();
+        Set<String> seenEmailsInFile = new HashSet<>();
+        ProcessingSummary summary = new ProcessingSummary();
+
+        try (Workbook workbook = new XSSFWorkbook(new ByteArrayInputStream(file.getBytes()))) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Iterator<Row> rows = sheet.iterator();
+
+            if (!rows.hasNext()) {
+                throw new IllegalArgumentException("Excel file is empty");
+            }
+
+            Row headerRow = rows.next();
+            validateExcelHeaders(headerRow);
+
+            while (rows.hasNext()) {
+                Row currentRow = rows.next();
+                long rowNumber = currentRow.getRowNum() + 1;
+
+                try {
+                    String name = safeTrim(getCellValue(currentRow.getCell(0)));
+                    String email = normalizeEmail(getCellValue(currentRow.getCell(1)));
+                    String phoneNo = safeTrim(getCellValue(currentRow.getCell(2)));
+                    String companyName = safeTrim(getCellValue(currentRow.getCell(3)));
+
+                    if (name.isEmpty()) {
+                        summary.addValidationError(rowNumber, "Name is required");
+                        continue;
+                    }
+
+                    if (email.isEmpty() || !email.contains("@")) {
+                        summary.addValidationError(rowNumber, "Valid email is required");
+                        continue;
+                    }
+
+                    if (!keepDuplicates && !seenEmailsInFile.add(email)) {
+                        summary.addDuplicate(rowNumber, email, "Duplicate email in uploaded file");
+                        continue;
+                    }
+
+                    UserDetails userDetails = new UserDetails();
+                    userDetails.setName(name);
+                    userDetails.setEmail(email);
+                    userDetails.setPhoneNo(phoneNo);
+                    userDetails.setCompanyName(companyName);
+                    userDetails.setUploadedFileId(uploadedFile.getId());
+                    parsedRows.add(new ParsedUserRow(userDetails, rowNumber));
+                } catch (Exception e) {
+                    summary.addValidationError(rowNumber, "Invalid row data: " + safeErrorMessage(e.getMessage()));
+                }
+            }
+        }
+
+        persistParsedRows(parsedRows, summary, keepDuplicates);
+        return summary;
+    }
+
+    private void persistParsedRows(List<ParsedUserRow> parsedRows, ProcessingSummary summary, boolean keepDuplicates) {
+        if (parsedRows.isEmpty()) {
+            return;
+        }
+
+        if (keepDuplicates) {
+            for (ParsedUserRow parsedRow : parsedRows) {
+                try {
+                    userDetailsRepository.saveAndFlush(parsedRow.userDetails);
+                    summary.incrementProcessed();
+                } catch (DataIntegrityViolationException e) {
+                    // Fallback safety in case a DB-level unique index still exists.
+                    summary.addDuplicate(parsedRow.rowNumber, parsedRow.userDetails.getEmail(), "Email already exists");
+                }
+            }
+            return;
+        }
+
+        Set<String> candidateEmails = parsedRows.stream()
+                .map(parsedRow -> parsedRow.userDetails.getEmail())
+                .collect(Collectors.toSet());
+
+        Set<String> existingEmails = userDetailsRepository.findAllByEmailIn(candidateEmails).stream()
+                .map(existingUser -> normalizeEmail(existingUser.getEmail()))
+                .collect(Collectors.toSet());
+
+        for (ParsedUserRow parsedRow : parsedRows) {
+            String email = parsedRow.userDetails.getEmail();
+
+            if (existingEmails.contains(email)) {
+                summary.addDuplicate(parsedRow.rowNumber, email, "Email already exists");
+                continue;
+            }
+
+            try {
+                userDetailsRepository.saveAndFlush(parsedRow.userDetails);
+                summary.incrementProcessed();
+            } catch (DataIntegrityViolationException e) {
+                summary.addDuplicate(parsedRow.rowNumber, email, "Email already exists");
+            }
+        }
+    }
+
+    private ProcessingSummary collectCSVRowsForDuplicateCheck(MultipartFile file, List<ParsedUserRow> parsedRows) throws IOException {
+        Set<String> seenEmailsInFile = new HashSet<>();
+        ProcessingSummary summary = new ProcessingSummary();
+
+        try (BufferedReader fileReader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8));
+             CSVParser csvParser = new CSVParser(fileReader,
+                     CSVFormat.DEFAULT
+                             .withFirstRecordAsHeader()
+                             .withIgnoreHeaderCase()
+                             .withTrim()
+                             .withHeader(CSV_HEADERS))) {
+
+            validateCSVHeaders(csvParser.getHeaderMap().keySet());
+
+            for (CSVRecord csvRecord : csvParser) {
+                long rowNumber = csvRecord.getRecordNumber() + 1;
+
+                try {
+                    String name = safeTrim(csvRecord.get("name"));
+                    String email = normalizeEmail(csvRecord.get("email"));
+                    String phoneNo = safeTrim(csvRecord.get("phone_no"));
+                    String companyName = safeTrim(csvRecord.get("company_name"));
+
+                    if (name.isEmpty()) {
+                        summary.addValidationError(rowNumber, "Name is required");
+                        continue;
+                    }
+
+                    if (email.isEmpty() || !email.contains("@")) {
+                        summary.addValidationError(rowNumber, "Valid email is required");
+                        continue;
+                    }
+
+                    if (!seenEmailsInFile.add(email)) {
+                        summary.addDuplicate(rowNumber, email, "Duplicate email in uploaded file");
+                        continue;
+                    }
+
+                    UserDetails userDetails = new UserDetails();
+                    userDetails.setName(name);
+                    userDetails.setEmail(email);
+                    userDetails.setPhoneNo(phoneNo);
+                    userDetails.setCompanyName(companyName);
+                    parsedRows.add(new ParsedUserRow(userDetails, rowNumber));
+                } catch (Exception e) {
+                    summary.addValidationError(rowNumber, "Invalid row data: " + safeErrorMessage(e.getMessage()));
+                }
+            }
+        }
+
+        return summary;
+    }
+
+    private ProcessingSummary collectExcelRowsForDuplicateCheck(MultipartFile file, List<ParsedUserRow> parsedRows) throws IOException {
         Set<String> seenEmailsInFile = new HashSet<>();
         ProcessingSummary summary = new ProcessingSummary();
 
@@ -250,7 +526,6 @@ public class FileStorageService {
                     userDetails.setEmail(email);
                     userDetails.setPhoneNo(phoneNo);
                     userDetails.setCompanyName(companyName);
-                    userDetails.setUploadedFileId(uploadedFile.getId());
                     parsedRows.add(new ParsedUserRow(userDetails, rowNumber));
                 } catch (Exception e) {
                     summary.addValidationError(rowNumber, "Invalid row data: " + safeErrorMessage(e.getMessage()));
@@ -258,38 +533,7 @@ public class FileStorageService {
             }
         }
 
-        persistParsedRows(parsedRows, summary);
         return summary;
-    }
-
-    private void persistParsedRows(List<ParsedUserRow> parsedRows, ProcessingSummary summary) {
-        if (parsedRows.isEmpty()) {
-            return;
-        }
-
-        Set<String> candidateEmails = parsedRows.stream()
-                .map(parsedRow -> parsedRow.userDetails.getEmail())
-                .collect(Collectors.toSet());
-
-        Set<String> existingEmails = userDetailsRepository.findAllByEmailIn(candidateEmails).stream()
-                .map(existingUser -> normalizeEmail(existingUser.getEmail()))
-                .collect(Collectors.toSet());
-
-        for (ParsedUserRow parsedRow : parsedRows) {
-            String email = parsedRow.userDetails.getEmail();
-
-            if (existingEmails.contains(email)) {
-                summary.addDuplicate(parsedRow.rowNumber, email, "Email already exists");
-                continue;
-            }
-
-            try {
-                userDetailsRepository.saveAndFlush(parsedRow.userDetails);
-                summary.incrementProcessed();
-            } catch (DataIntegrityViolationException e) {
-                summary.addDuplicate(parsedRow.rowNumber, email, "Email already exists");
-            }
-        }
     }
 
     private void applyProcessingSummary(UploadedFile uploadedFile, ProcessingSummary summary) {

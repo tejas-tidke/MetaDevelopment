@@ -12,7 +12,6 @@ import { saveUserData } from "../services/authService";
 import Captcha from "./Captcha";
 import { useRedirectIfAuthenticated } from "../hooks/useAuthProtection";
 import AuthLayout from "./ui/AuthLayout";
-import AuthShowcase from "./ui/AuthShowcase";
 import AuthAlert from "./ui/AuthAlert";
 import AuthButton from "./ui/AuthButton";
 import AuthPasswordToggle from "./ui/AuthPasswordToggle";
@@ -46,7 +45,7 @@ function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  useRedirectIfAuthenticated();
+  const isCheckingAuth = useRedirectIfAuthenticated();
 
   useEffect(() => {
     if (location.state && location.state.message) {
@@ -228,23 +227,19 @@ function Login() {
     }
   };
 
+  if (isCheckingAuth) {
+    return (
+      <AuthLayout>
+        <main className="auth-card">
+          <h1 className="auth-heading">Checking session...</h1>
+          <p className="auth-subcopy">Please wait while we verify your sign-in state.</p>
+        </main>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout>
-      <AuthShowcase
-        title="Secure access to your file intelligence environment."
-        copy="Sign in to continue where you left off. Your templates, uploads, and workflow settings stay synced across sessions."
-        highlights={[
-          "One account for templates, uploads, and profile controls",
-          "Multi-provider sign-in with security verification",
-          "Session checks on every protected route",
-        ]}
-        metrics={[
-          { value: "100%", label: "Firebase-backed auth" },
-          { value: "3", label: "OAuth providers" },
-          { value: "Live", label: "Captcha security check" },
-        ]}
-      />
-
       <main className="auth-card">
         <div className="auth-card-top">
           <span className="auth-brand-label">Sign In</span>
@@ -345,13 +340,22 @@ function Login() {
           </AuthButton>
         </div>
 
-        {message && <AuthAlert tone={isSuccessMessage(message) ? "success" : "error"}>{message}</AuthAlert>}
+        {message && (
+          <AuthAlert
+            tone={isSuccessMessage(message) ? "success" : "error"}
+            title={isSuccessMessage(message) ? "Success" : "Error"}
+            toastKey={message}
+            onClose={() => setMessage("")}
+          >
+            {message}
+          </AuthAlert>
+        )}
 
         <div className="auth-footer">
           <p>
             New here? <Link to="/signup">Create your account</Link>
           </p>
-          <small>Copyright {new Date().getFullYear()} Meta Workspace</small>
+          
         </div>
       </main>
       {showForgotPassword && (
@@ -382,7 +386,14 @@ function Login() {
               </div>
 
               {resetMessage && (
-                <AuthAlert tone={isSuccessMessage(resetMessage) ? "success" : "error"}>{resetMessage}</AuthAlert>
+                <AuthAlert
+                  tone={isSuccessMessage(resetMessage) ? "success" : "error"}
+                  title={isSuccessMessage(resetMessage) ? "Success" : "Error"}
+                  toastKey={resetMessage}
+                  onClose={() => setResetMessage("")}
+                >
+                  {resetMessage}
+                </AuthAlert>
               )}
 
               <div className="auth-modal-actions">

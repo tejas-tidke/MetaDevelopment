@@ -60,7 +60,9 @@ function UserProfile() {
             {message && (
               <AppAlert
                 tone={message.includes("success") || message.includes("sent") ? "success" : "error"}
-                className="mb-6"
+                title={message.includes("success") || message.includes("sent") ? "Success" : "Error"}
+                toastKey={message}
+                onClose={() => setMessage("")}
               >
                 {message}
               </AppAlert>

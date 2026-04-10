@@ -68,6 +68,8 @@ public class WabaTemplatesController {
                     String headerFormat = "";
                     String headerText = "";
                     int headerParamCount = 0;
+                    String footerText = "";
+                    List<Map<String, Object>> buttons = new ArrayList<>();
                     JsonNode components = t.get("components");
                     if (components != null && components.isArray()) {
                         for (JsonNode c : components) {
@@ -80,6 +82,40 @@ public class WabaTemplatesController {
                                 if ("TEXT".equalsIgnoreCase(headerFormat)) {
                                     headerText = optText(c, "text");
                                     headerParamCount = countPlaceholders(headerText);
+                                }
+                            } else if ("FOOTER".equalsIgnoreCase(ctype)) {
+                                footerText = optText(c, "text");
+                            } else if ("BUTTONS".equalsIgnoreCase(ctype)) {
+                                JsonNode buttonNodes = c.get("buttons");
+                                if (buttonNodes != null && buttonNodes.isArray()) {
+                                    for (int bIndex = 0; bIndex < buttonNodes.size(); bIndex++) {
+                                        JsonNode buttonNode = buttonNodes.get(bIndex);
+                                        String buttonType = optText(buttonNode, "type").toUpperCase(Locale.ROOT);
+                                        Map<String, Object> buttonInfo = new HashMap<>();
+                                        buttonInfo.put("index", bIndex);
+                                        buttonInfo.put("type", buttonType);
+                                        buttonInfo.put("text", optText(buttonNode, "text"));
+
+                                        int buttonParamCount = 0;
+                                        if ("URL".equals(buttonType)) {
+                                            String buttonUrl = optText(buttonNode, "url");
+                                            buttonInfo.put("url", buttonUrl);
+                                            buttonParamCount = countPlaceholders(buttonUrl);
+                                            if (buttonParamCount > 0) {
+                                                buttonInfo.put("parameterType", "text");
+                                            }
+                                        } else if ("PHONE_NUMBER".equals(buttonType)) {
+                                            buttonInfo.put("phoneNumber", optText(buttonNode, "phone_number"));
+                                        } else if ("FLOW".equals(buttonType)) {
+                                            buttonInfo.put("flowId", optText(buttonNode, "flow_id"));
+                                            buttonInfo.put("flowName", optText(buttonNode, "flow_name"));
+                                            buttonInfo.put("flowAction", optText(buttonNode, "flow_action"));
+                                            buttonInfo.put("navigateScreen", optText(buttonNode, "navigate_screen"));
+                                        }
+
+                                        buttonInfo.put("paramCount", buttonParamCount);
+                                        buttons.add(buttonInfo);
+                                    }
                                 }
                             }
                         }
@@ -94,6 +130,9 @@ public class WabaTemplatesController {
                     item.put("bodyParamCount", bodyParamCount);
                     if (!headerText.isEmpty()) item.put("headerText", headerText);
                     item.put("headerParamCount", headerParamCount);
+                    item.put("footer", footerText);
+                    item.put("buttons", buttons);
+                    item.put("buttonCount", buttons.size());
                     templates.add(item);
                 }
             }

@@ -43,6 +43,7 @@ public class WabaMessagesController {
         System.out.println("Received send template request: " + req.templateName); // Log the template name
         System.out.println("Request details: " + req); // Log the full request
         System.out.println("Parameters: " + req.parameters); // Log parameters specifically
+        System.out.println("Button parameters: " + req.buttonParameters); // Log button params specifically
         System.out.println("Personalize with user data: " + req.personalizeWithUserData); // Log personalization flag
         
         // Log the number of recipients
@@ -325,24 +326,34 @@ public class WabaMessagesController {
             } else {
                 System.out.println("No body parameters to add");
             }
+
+            // Add template button parameters (dynamic URL suffix, payloads, etc.)
+            appendButtonComponents(components, req.buttonParameters);
             
             // Add components to template if we have any
             if (!components.isEmpty()) {
                 System.out.println("Processing components before adding to template: " + components);
-                // Ensure we don't have duplicate components of the same type
-                Map<String, Map<String, Object>> uniqueComponents = new LinkedHashMap<>();
+                // Ensure we don't have duplicate singleton components of the same type.
+                // Button components are repeatable (different indexes), so keep all of them.
+                Map<String, Map<String, Object>> uniqueSingletonComponents = new LinkedHashMap<>();
+                List<Map<String, Object>> buttonComponents = new ArrayList<>();
                 
                 for (Map<String, Object> comp : components) {
                     String type = (String) comp.get("type");
                     if (type != null) {
                         System.out.println("Adding component of type: " + type);
-                        uniqueComponents.put(type, comp);
+                        if ("button".equalsIgnoreCase(type)) {
+                            buttonComponents.add(comp);
+                        } else {
+                            uniqueSingletonComponents.put(type.toLowerCase(Locale.ROOT), comp);
+                        }
                     } else {
                         System.out.println("Component without type found: " + comp);
                     }
                 }
                 
-                List<Map<String, Object>> finalComponents = new ArrayList<>(uniqueComponents.values());
+                List<Map<String, Object>> finalComponents = new ArrayList<>(uniqueSingletonComponents.values());
+                finalComponents.addAll(buttonComponents);
                 template.put("components", finalComponents);
                 System.out.println("Final template components: " + finalComponents);
             } else {
@@ -1065,6 +1076,69 @@ public class WabaMessagesController {
         return normalized;
     }
 
+    // Helper method to append button components for template sending.
+    private void appendButtonComponents(List<Map<String, Object>> components, List<Map<String, Object>> buttonParameters) {
+        if (buttonParameters == null || buttonParameters.isEmpty()) {
+            return;
+        }
+
+        for (Map<String, Object> buttonInput : buttonParameters) {
+            if (buttonInput == null || buttonInput.isEmpty()) {
+                continue;
+            }
+
+            Object subTypeObj = buttonInput.get("subType");
+            Object indexObj = buttonInput.get("index");
+            if (subTypeObj == null || indexObj == null) {
+                continue;
+            }
+
+            String subType = String.valueOf(subTypeObj).trim().toLowerCase(Locale.ROOT);
+            String index = String.valueOf(indexObj).trim();
+            if (subType.isBlank() || index.isBlank()) {
+                continue;
+            }
+
+            Map<String, Object> buttonComponent = new LinkedHashMap<>();
+            buttonComponent.put("type", "button");
+            buttonComponent.put("sub_type", subType);
+            buttonComponent.put("index", index);
+
+            Object rawParams = buttonInput.get("parameters");
+            if (rawParams instanceof List<?>) {
+                List<Map<String, Object>> cleanedParams = new ArrayList<>();
+                for (Object paramObj : (List<?>) rawParams) {
+                    if (!(paramObj instanceof Map<?, ?>)) {
+                        continue;
+                    }
+
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> rawParam = (Map<String, Object>) paramObj;
+                    if (rawParam.isEmpty()) {
+                        continue;
+                    }
+
+                    Map<String, Object> cleanedParam = new LinkedHashMap<>();
+                    for (Map.Entry<String, Object> entry : rawParam.entrySet()) {
+                        if (entry.getKey() != null) {
+                            cleanedParam.put(entry.getKey(), entry.getValue());
+                        }
+                    }
+
+                    if (!cleanedParam.isEmpty()) {
+                        cleanedParams.add(cleanedParam);
+                    }
+                }
+
+                if (!cleanedParams.isEmpty()) {
+                    buttonComponent.put("parameters", cleanedParams);
+                }
+            }
+
+            components.add(buttonComponent);
+        }
+    }
+
     // Helper method to replace placeholders in all parameters
     private void replacePlaceholdersInAllParameters(List<Map<String, Object>> components, List<Map<String, Object>> bodyParams, String userName) {
         System.out.println("Replacing placeholders with user name: " + userName);
@@ -1140,6 +1214,7 @@ public class WabaMessagesController {
             chunkRequest.headerText = originalRequest.headerText;
             chunkRequest.mediaId = originalRequest.mediaId;
             chunkRequest.personalizeWithUserData = originalRequest.personalizeWithUserData;
+            chunkRequest.buttonParameters = originalRequest.buttonParameters;
             // Copy additional fields if they exist
             chunkRequest.headerMediaUrl = originalRequest.headerMediaUrl;
             chunkRequest.headerMediaFilename = originalRequest.headerMediaFilename;
@@ -1299,6 +1374,8 @@ public class WabaMessagesController {
                     components.add(bodyComp);
                 }
             }
+
+            appendButtonComponents(components, req.buttonParameters);
             
             if (!components.isEmpty()) {
                 template.put("components", components);

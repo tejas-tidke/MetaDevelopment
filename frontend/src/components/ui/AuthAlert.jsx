@@ -1,13 +1,22 @@
 import React from "react";
+import ToastAlert from "./ToastAlert";
 
-function AuthAlert({ tone = "error", className = "", children, ...props }) {
+function AuthAlert({ tone = "error", className = "", title, toastKey, onClose, children, ...props }) {
   const allowedTones = new Set(["success", "error"]);
   const finalTone = allowedTones.has(tone) ? tone : "error";
+  const resolvedTitle = title || (finalTone === "success" ? "Success" : "Error");
 
   return (
-    <div className={`auth-alert ${finalTone} ${className}`.trim()} {...props}>
+    <ToastAlert
+      tone={finalTone}
+      title={resolvedTitle}
+      className={className}
+      toastKey={toastKey}
+      onClose={onClose}
+      {...props}
+    >
       {children}
-    </div>
+    </ToastAlert>
   );
 }
 

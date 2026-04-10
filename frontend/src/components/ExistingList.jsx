@@ -25,6 +25,10 @@ function ExistingList() {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showUploadToast, setShowUploadToast] = useState(Boolean(location.state?.uploadSuccess));
+  const [deleteToast, setDeleteToast] = useState(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState([]);
   const safeUploadedFiles = Array.isArray(uploadedFiles) ? uploadedFiles : [];
 
   useEffect(() => {
@@ -143,23 +147,44 @@ function ExistingList() {
       .map(({ u }) => u.id);
 
     if (idsToDelete.length === 0) return;
-    if (!window.confirm(`Delete ${idsToDelete.length} selected user(s)? This cannot be undone.`)) return;
+    setPendingDeleteIds(idsToDelete);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDeleteSelected = async () => {
+    if (pendingDeleteIds.length === 0) {
+      setIsDeleteConfirmOpen(false);
+      return;
+    }
 
     try {
       setIsDeleting(true);
-      await api.post("user-details/delete", idsToDelete);
-      const idSet = new Set(idsToDelete);
+      await api.post("user-details/delete", pendingDeleteIds);
+      const idSet = new Set(pendingDeleteIds);
       setUserDetails(prev => prev.filter(u => !idSet.has(u.id)));
       setFilteredDetails(prev => prev.filter(u => !idSet.has(u.id)));
       // Clear deleted from selection
       const nextSel = new Set(selectedUsers);
       filteredDetails.forEach((u, i) => { if (idSet.has(u.id)) nextSel.delete(getUserKey(u, i)); });
       setSelectedUsers(nextSel);
+      setDeleteToast({
+        tone: "success",
+        title: "Users Deleted",
+        message: `${pendingDeleteIds.length} user${pendingDeleteIds.length === 1 ? "" : "s"} deleted successfully.`,
+        key: `${Date.now()}-${pendingDeleteIds.length}`
+      });
     } catch (err) {
       console.error("Delete users error:", err);
-      alert("Failed to delete selected users. Please try again.");
+      setDeleteToast({
+        tone: "error",
+        title: "Delete Failed",
+        message: "Failed to delete selected users. Please try again.",
+        key: `${Date.now()}-delete-error`
+      });
     } finally {
       setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+      setPendingDeleteIds([]);
     }
   };
 
@@ -202,7 +227,7 @@ function ExistingList() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout className="h-screen overflow-hidden" shellClassName="h-full flex flex-col">
         <WorkspaceHeader
           title="Data Management"
           subtitle="View and manage all user records and file uploads in one place."
@@ -218,25 +243,28 @@ function ExistingList() {
         />
 
         {/* Success Message */}
-        {location.state?.uploadSuccess && (
-          <AppAlert tone="success" className="mb-6">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-2">
-                <h3 className="text-sm font-medium text-green-800">File Uploaded Successfully!</h3>
-                <div className="mt-1 text-green-700 text-xs">
-                  <p>
-                    File "<span className="font-semibold">{location.state.fileName}</span>" has been processed.
-                    {location.state.processedRecords > 0 && ` ${location.state.processedRecords} records imported.`}
-                    {location.state.errorRecords > 0 && ` ${location.state.errorRecords} records had errors.`}
-                  </p>
-                </div>
-              </div>
-            </div>
+        {showUploadToast && location.state?.uploadSuccess && (
+          <AppAlert
+            tone="success"
+            title="File Uploaded Successfully"
+            toastKey={`existing-list:${location.state.fileName || ""}:${location.state.processedRecords || 0}:${location.state.errorRecords || 0}`}
+            onClose={() => setShowUploadToast(false)}
+          >
+            File "{location.state.fileName}" has been processed.
+            {location.state.processedRecords > 0 && ` ${location.state.processedRecords} records imported.`}
+            {location.state.errorRecords > 0 && ` ${location.state.errorRecords} records had errors.`}
+          </AppAlert>
+        )}
+
+        {deleteToast && (
+          <AppAlert
+            tone={deleteToast.tone}
+            title={deleteToast.title}
+            toastKey={`existing-list:delete:${deleteToast.key}`}
+            className={showUploadToast ? "bottom-20 sm:bottom-24" : ""}
+            onClose={() => setDeleteToast(null)}
+          >
+            {deleteToast.message}
           </AppAlert>
         )}
 
@@ -272,10 +300,11 @@ function ExistingList() {
           </div>
         </div>
 
+        <div className="min-h-0 flex-1 pb-6">
         {activeTab === 'users' ? (
           <>
             {/* User Details Table */}
-            <AppCard className="overflow-hidden">
+            <AppCard className="h-full overflow-hidden flex flex-col">
               <div className="px-5 py-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-gray-800">All User Details</h2>
@@ -312,21 +341,23 @@ function ExistingList() {
               </div>
               
               {loading.users ? (
-                renderLoading()
+                <div className="min-h-0 flex-1 overflow-auto">{renderLoading()}</div>
               ) : error.users ? (
-                renderError(error.users)
+                <div className="min-h-0 flex-1 overflow-auto">{renderError(error.users)}</div>
               ) : filteredDetails.length === 0 ? (
-                <div className="p-8 text-center">
-                  <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <h3 className="mt-3 text-sm font-medium text-gray-900">No user details found</h3>
-                  <p className="mt-1 text-gray-500 text-xs">
-                    {searchTerm ? "No users match your search criteria." : "There are no user records in the system."}
-                  </p>
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <div className="p-8 text-center">
+                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <h3 className="mt-3 text-sm font-medium text-gray-900">No user details found</h3>
+                    <p className="mt-1 text-gray-500 text-xs">
+                      {searchTerm ? "No users match your search criteria." : "There are no user records in the system."}
+                    </p>
+                  </div>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -440,7 +471,7 @@ function ExistingList() {
         ) : (
           <>
             {/* Uploaded Files List */}
-            <AppCard className="overflow-hidden">
+            <AppCard className="h-full overflow-hidden flex flex-col">
               <div className="px-5 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-800">Uploaded Files</h2>
                 <p className="mt-1 text-xs text-gray-500">
@@ -449,29 +480,31 @@ function ExistingList() {
               </div>
               
               {loading.files ? (
-                renderLoading()
+                <div className="min-h-0 flex-1 overflow-auto">{renderLoading()}</div>
               ) : error.files ? (
-                renderError(error.files)
+                <div className="min-h-0 flex-1 overflow-auto">{renderError(error.files)}</div>
               ) : safeUploadedFiles.length === 0 ? (
-                <div className="p-8 text-center">
-                  <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  <h3 className="mt-3 text-sm font-medium text-gray-900">No files uploaded yet</h3>
-                  <p className="mt-1 text-gray-500 text-xs">
-                    Get started by uploading your first data file.
-                  </p>
-                  <div className="mt-5">
-                    <button
-                      onClick={() => navigate('/file-upload')}
-                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      Upload File
-                    </button>
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <div className="p-8 text-center">
+                    <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <h3 className="mt-3 text-sm font-medium text-gray-900">No files uploaded yet</h3>
+                    <p className="mt-1 text-gray-500 text-xs">
+                      Get started by uploading your first data file.
+                    </p>
+                    <div className="mt-5">
+                      <button
+                        onClick={() => navigate('/file-upload')}
+                        className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        Upload File
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -545,6 +578,43 @@ function ExistingList() {
               )}
             </AppCard>
           </>
+        )}
+        </div>
+
+        {isDeleteConfirmOpen && (
+          <div className="fixed inset-0 z-[80] bg-slate-900/45 backdrop-blur-[1px] flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Delete Selected Users?</h3>
+              </div>
+
+              <div className="px-5 py-4 text-sm text-gray-700">
+                Are you sure you want to delete {pendingDeleteIds.length} selected user{pendingDeleteIds.length === 1 ? "" : "s"}?
+                This action cannot be undone.
+              </div>
+
+              <div className="px-5 py-4 border-t border-gray-200 flex justify-end gap-2">
+                <AppButton
+                  variant="secondary"
+                  onClick={() => {
+                    if (isDeleting) return;
+                    setIsDeleteConfirmOpen(false);
+                    setPendingDeleteIds([]);
+                  }}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </AppButton>
+                <AppButton
+                  variant="danger"
+                  onClick={handleConfirmDeleteSelected}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </AppButton>
+              </div>
+            </div>
+          </div>
         )}
     </PageLayout>
   );

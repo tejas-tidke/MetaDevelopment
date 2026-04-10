@@ -22,7 +22,7 @@ public class UserDetails {
 
     @NotBlank(message = "Email is required")
     @Email(message = "Email should be valid")
-    @Column(name = "email", nullable = false, unique = true, length = 100)
+    @Column(name = "email", nullable = false, length = 100)
     private String email;
 
     @Size(max = 100, message = "Company name must be less than 100 characters")

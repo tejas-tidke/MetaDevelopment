@@ -17,9 +17,11 @@ function FileUpload() {
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState('');
-  const [isError, setIsError] = useState(false);
+  const [messageTone, setMessageTone] = useState('info');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [duplicateInfo, setDuplicateInfo] = useState(null);
 
   const ALLOWED_FILE_TYPES = [
     'text/csv',
@@ -41,13 +43,15 @@ function FileUpload() {
 
     // Reset state
     setMessage('');
-    setIsError(false);
+    setMessageTone('info');
     setUploadProgress(0);
+    setIsDuplicateModalOpen(false);
+    setDuplicateInfo(null);
 
     // Validate file type
     if (!ALLOWED_FILE_TYPES.includes(selectedFile.type)) {
       setMessage('Invalid file type. Please upload a CSV or Excel file.');
-      setIsError(true);
+      setMessageTone('error');
       setFile(null);
       return;
     }
@@ -55,7 +59,7 @@ function FileUpload() {
     // Validate file size
     if (selectedFile.size > MAX_FILE_SIZE) {
       setMessage('File size exceeds the maximum limit of 5MB');
-      setIsError(true);
+      setMessageTone('error');
       setFile(null);
       return;
     }
@@ -80,10 +84,10 @@ function FileUpload() {
     validateAndSetFile(droppedFile);
   };
 
-  const handleUpload = async () => {
+  const uploadFileWithPreference = async (keepDuplicates) => {
     if (!file) {
       setMessage('Please select a file first');
-      setIsError(true);
+      setMessageTone('error');
       return;
     }
 
@@ -91,19 +95,20 @@ function FileUpload() {
     formData.append('file', file);
 
     setIsUploading(true);
-    setMessage('Uploading file...');
-    setIsError(false);
+    setMessage(keepDuplicates ? 'Uploading file and keeping duplicates...' : 'Uploading file...');
+    setMessageTone('info');
     setUploadProgress(10);
 
     try {
-      // Use the api service instead of direct axios call
       const response = await api.post('/upload', formData, {
+        params: { keepDuplicates },
         headers: {
           'Content-Type': 'multipart/form-data',
         },
         onUploadProgress: (progressEvent) => {
-          const progress = Math.round((progressEvent.loaded * 90) / progressEvent.total);
-          setUploadProgress(10 + progress); // Start at 10% to show immediate feedback
+          const total = progressEvent.total || 1;
+          const progress = Math.round((progressEvent.loaded * 90) / total);
+          setUploadProgress(10 + progress);
         },
       });
 
@@ -118,30 +123,26 @@ function FileUpload() {
 
       setUploadProgress(100);
       setMessage(uploadMessage);
-      
-      // Give some time for the backend to process the file
+      setMessageTone(errorRecords > 0 ? 'warn' : 'success');
+
       setTimeout(() => {
-        // Navigate to the uploaded-data page instead of templates page
-        navigate('/uploaded-data', { 
-          state: { 
+        navigate('/uploaded-data', {
+          state: {
             fileId: uploadedFile.id,
             fileName: file.name,
             processedRecords,
             errorRecords,
             uploadMessage,
             warningDetails
-          } 
+          }
         });
       }, 1000);
-      
     } catch (error) {
       console.error('Error uploading file:', error);
       setUploadProgress(0);
-      
+
       let errorMessage = 'Error uploading file';
       if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
         if (error.response.status === 400) {
           errorMessage = error.response.data?.message || error.response.data || 'Invalid file format';
         } else if (error.response.status === 413) {
@@ -154,15 +155,73 @@ function FileUpload() {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        // The request was made but no response was received
         errorMessage = 'No response from server. Please check your connection.';
       }
-      
+
       setMessage(errorMessage);
-      setIsError(true);
+      setMessageTone('error');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleUpload = async () => {
+    if (!file) {
+      setMessage('Please select a file first');
+      setMessageTone('error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsUploading(true);
+    setMessage('Checking duplicate contacts...');
+    setMessageTone('info');
+    setUploadProgress(5);
+
+    try {
+      const checkResponse = await api.post('/upload/check-duplicates', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const checkData = checkResponse.data || {};
+      const totalDuplicates = Number(checkData.totalDuplicates || 0);
+
+      if (checkData.status === 'duplicates_found' && totalDuplicates > 0) {
+        setDuplicateInfo(checkData);
+        setIsDuplicateModalOpen(true);
+        setMessage(
+          `${totalDuplicates} duplicate contact(s) found. Choose whether to keep or skip duplicates.`
+        );
+        setMessageTone('warn');
+        setUploadProgress(0);
+        return;
+      }
+
+      await uploadFileWithPreference(false);
+    } catch (error) {
+      console.error('Error checking duplicates:', error);
+      const fallbackMessage =
+        error.response?.data?.message || 'Unable to check duplicates. Please try again.';
+      setMessage(fallbackMessage);
+      setMessageTone('error');
+      setUploadProgress(0);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleKeepDuplicates = async () => {
+    setIsDuplicateModalOpen(false);
+    await uploadFileWithPreference(true);
+  };
+
+  const handleSkipDuplicates = async () => {
+    setIsDuplicateModalOpen(false);
+    await uploadFileWithPreference(false);
   };
 
   // Format file size
@@ -310,45 +369,21 @@ function FileUpload() {
 
             {/* Status Message */}
             {message && (
-              <AppAlert tone={isError ? "error" : "success"} className="p-3">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0">
-                    {isError ? (
-                      <svg
-                        className="h-4 w-4 text-red-500"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10l-1.293 1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    ) : (
-                      <svg
-                        className="h-4 w-4 text-green-500"
-                        fill="currentColor"
-                        viewBox="0 0 20 20"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="ml-2">
-                    <p
-                      className={`text-sm font-medium ${
-                        isError ? 'text-red-800' : 'text-green-800'
-                      }`}
-                    >
-                      {message}
-                    </p>
-                  </div>
-                </div>
+              <AppAlert
+                tone={messageTone}
+                title={
+                  messageTone === "success"
+                    ? "File Upload Complete"
+                    : messageTone === "warn"
+                      ? "Upload Warning"
+                      : messageTone === "error"
+                        ? "Upload Failed"
+                        : "Uploading"
+                }
+                toastKey={`${messageTone}:${message}`}
+                onClose={() => setMessage("")}
+              >
+                {message}
               </AppAlert>
             )}
 
@@ -405,51 +440,49 @@ function FileUpload() {
             </div>
           </div>
         </AppCard>
-        
-        {/* Info Section */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center mb-2">
-              <div className="bg-blue-100 p-1.5 rounded-md mr-2">
-                <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 00-2-2V5a2 2 0 002-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+
+        {isDuplicateModalOpen && (
+          <div className="fixed inset-0 z-[80] bg-slate-900/45 backdrop-blur-[1px] flex items-center justify-center p-4">
+            <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-semibold text-gray-900">Duplicate Contacts Found</h3>
               </div>
-              <h3 className="text-sm font-semibold text-gray-800">CSV Format</h3>
-            </div>
-            <p className="text-gray-600 text-xs">
-              Upload files with columns: name, email, phone_no, company_name
-            </p>
-          </div>
-          
-          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center mb-2">
-              <div className="bg-green-100 p-1.5 rounded-md mr-2">
-                <svg className="h-5 w-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
+
+              <div className="px-5 py-4 text-sm text-gray-700 space-y-2">
+                <p>
+                  We found <span className="font-semibold">{duplicateInfo?.totalDuplicates || 0}</span> duplicate contact(s).
+                </p>
+                <p className="text-xs text-gray-600">
+                  In file duplicates: {duplicateInfo?.duplicateInFileCount || 0} | Existing in system: {duplicateInfo?.duplicateInDatabaseCount || 0}
+                </p>
+                <p className="text-sm text-gray-600">
+                  Do you want to keep duplicate contacts in this upload?
+                </p>
               </div>
-              <h3 className="text-sm font-semibold text-gray-800">Excel Support</h3>
-            </div>
-            <p className="text-gray-600 text-xs">
-              Supports both .xls and .xlsx file formats
-            </p>
-          </div>
-          
-          <div className="bg-white rounded-lg p-4 shadow-sm border border-gray-100">
-            <div className="flex items-center mb-2">
-              <div className="bg-amber-100 p-1.5 rounded-md mr-2">
-                <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
+
+              <div className="px-5 py-4 border-t border-gray-200 flex flex-wrap justify-end gap-2">
+                <AppButton
+                  variant="secondary"
+                  onClick={() => setIsDuplicateModalOpen(false)}
+                >
+                  Cancel
+                </AppButton>
+                <AppButton
+                  variant="secondary"
+                  onClick={handleSkipDuplicates}
+                >
+                  Don&apos;t Keep Duplicates
+                </AppButton>
+                <AppButton
+                  variant="primary"
+                  onClick={handleKeepDuplicates}
+                >
+                  Keep Duplicates
+                </AppButton>
               </div>
-              <h3 className="text-sm font-semibold text-gray-800">Secure Upload</h3>
             </div>
-            <p className="text-gray-600 text-xs">
-              Files are processed securely and deleted after import
-            </p>
           </div>
-        </div>
+        )}
     </PageLayout>
   );
 }

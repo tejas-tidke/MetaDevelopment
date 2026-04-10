@@ -5,6 +5,7 @@ import api from '../services/api';
 import WorkspaceHeader from './WorkspaceHeader';
 import AppCard from './ui/AppCard';
 import AppButton from './ui/AppButton';
+import AppAlert from './ui/AppAlert';
 import PageLayout from './ui/PageLayout';
 
 function Templates() {
@@ -37,6 +38,8 @@ function Templates() {
   const [personalizeWithUserData, setPersonalizeWithUserData] = useState(true); // New state for personalization
   // Body variables
   const [bodyParams, setBodyParams] = useState([]);
+  // Dynamic button variables keyed by button index -> array of values
+  const [buttonParamInputs, setButtonParamInputs] = useState({});
 
   const normalizeUsers = (users) =>
     (users || []).map((user, index) => ({
@@ -46,6 +49,25 @@ function Templates() {
       email: user?.email ?? "",
       companyName: user?.companyName ?? user?.company ?? ""
     }));
+
+  const toButtonInputKey = (button) => String(button?.index ?? "");
+
+  const getTemplateButtons = (template) => {
+    if (!template || !Array.isArray(template.buttons)) return [];
+    return template.buttons.map((button, idx) => ({
+      index: Number.isFinite(Number(button?.index)) ? Number(button.index) : idx,
+      type: (button?.type || "").toUpperCase(),
+      text: button?.text || "",
+      url: button?.url || "",
+      phoneNumber: button?.phoneNumber || "",
+      flowId: button?.flowId || "",
+      flowName: button?.flowName || "",
+      flowAction: button?.flowAction || "",
+      navigateScreen: button?.navigateScreen || "",
+      paramCount: Number(button?.paramCount || 0),
+      parameterType: button?.parameterType || "text"
+    }));
+  };
 
   // Prefer users passed from ExistingList; fallback to file-based users when fileId is provided.
   useEffect(() => {
@@ -106,6 +128,18 @@ function Templates() {
     // If personalization is enabled, we don't need the first parameter (it will be auto-filled with user's name)
     const adjustedCount = personalizeWithUserData && cnt > 0 ? cnt - 1 : cnt;
     setBodyParams(Array.from({ length: adjustedCount }, () => ""));
+
+    const templateButtons = getTemplateButtons(selectedTemplate);
+    const initialButtonInputs = {};
+    templateButtons.forEach((button) => {
+      if ((button.paramCount || 0) > 0) {
+        initialButtonInputs[toButtonInputKey(button)] = Array.from(
+          { length: button.paramCount },
+          () => ""
+        );
+      }
+    });
+    setButtonParamInputs(initialButtonInputs);
   }, [selectedTemplate, personalizeWithUserData]);
 
   const handleFileUpload = (e) => {
@@ -147,6 +181,8 @@ function Templates() {
   const headerFormat = (selectedTemplate?.headerFormat || "").toUpperCase();
   const bodyParamCount = Number(selectedTemplate?.bodyParamCount || 0);
   const headerParamCount = Number(selectedTemplate?.headerParamCount || 0);
+  const templateButtons = getTemplateButtons(selectedTemplate);
+  const dynamicButtons = templateButtons.filter((button) => (button.paramCount || 0) > 0);
   const hasDynamicTextHeader = headerFormat === "TEXT" && headerParamCount > 0;
   const hasMediaHeader = ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat);
   const requiresHeaderInput = hasDynamicTextHeader || hasMediaHeader;
@@ -163,7 +199,12 @@ function Templates() {
   // Adjust the body parameter count validation for personalization
   const expectedBodyParamCount = personalizeWithUserData && bodyParamCount > 0 ? bodyParamCount - 1 : bodyParamCount;
   const bodyOk = bodyParamCount === 0 || (Array.isArray(bodyParams) && bodyParams.length === expectedBodyParamCount && bodyParams.every(v => v.trim().length > 0));
-  const canSend = !!selectedTemplate && recipients.length > 0 && headerOk && bodyOk && !sending;
+  const buttonsOk = dynamicButtons.every((button) => {
+    const key = toButtonInputKey(button);
+    const values = buttonParamInputs[key] || [];
+    return values.length === button.paramCount && values.every((value) => (value || "").trim().length > 0);
+  });
+  const canSend = !!selectedTemplate && recipients.length > 0 && headerOk && bodyOk && buttonsOk && !sending;
 
   // First, let's update the header parameters in the handleSend function
   const handleSend = async () => {
@@ -179,9 +220,10 @@ function Templates() {
       
       // If there's a file to upload, handle it first
       let mediaUrl = headerMediaUrl;
+      let resolvedMediaId = mediaId.trim();
       
       // Only upload file if a file is selected and no media ID is provided
-      if (headerMediaFile && !mediaId.trim()) {
+      if (headerMediaFile && !resolvedMediaId) {
         try {
           const formData = new FormData();
           formData.append('file', headerMediaFile);
@@ -193,19 +235,28 @@ function Templates() {
             }
           });
           
-          // Check if the upload was successful and get the URL
+          // Check if the upload was successful and require media id from backend.
           if (uploadResponse.data && uploadResponse.data.status === "success" && uploadResponse.data.file) {
-            // Construct the full URL for the uploaded file
-            // Note: uploads are served directly from /uploads/ not /api/uploads/ due to resource handler configuration
-            mediaUrl = `http://localhost:8080/uploads/${uploadResponse.data.file.fileName}`;
+            // Preferred: Meta media ID returned from backend after Cloud API upload.
+            if (uploadResponse.data.mediaId) {
+              resolvedMediaId = String(uploadResponse.data.mediaId).trim();
+            }
+
+            if (!resolvedMediaId) {
+              throw new Error("Media ID was not returned by backend. Please restart backend and try again.");
+            }
           } else {
             throw new Error(uploadResponse.data?.message || 'No URL returned from server');
           }
         } catch (error) {
           console.error('Error uploading file:', error);
+          const backendMessage =
+            error.response?.data?.details ||
+            error.response?.data?.message ||
+            error.message;
           setSendResult({
             status: 'error',
-            message: 'Failed to upload image. Please try again.'
+            message: `Failed to upload image: ${backendMessage}`
           });
           setSending(false);
           return;
@@ -220,8 +271,8 @@ function Templates() {
       };
 
       // Add mediaId to payload if provided
-      if (mediaId.trim()) {
-        payload.mediaId = mediaId.trim();
+      if (resolvedMediaId) {
+        payload.mediaId = resolvedMediaId;
       }
 
     // Initialize parameters array
@@ -231,7 +282,7 @@ function Templates() {
     if (hasDynamicTextHeader && headerText.trim()) {
       payload.headerFormat = "TEXT";
       payload.headerText = headerText.trim();
-    } else if (hasMediaHeader && (mediaUrl.trim() || mediaId.trim())) {
+    } else if (hasMediaHeader && (mediaUrl.trim() || resolvedMediaId)) {
       payload.headerFormat = headerFormat;
         // For media headers, create the correct parameter structure
         const mediaParam = {
@@ -239,9 +290,9 @@ function Templates() {
         };
         
         // Use media ID if provided, otherwise use URL
-        if (mediaId.trim()) {
+        if (resolvedMediaId) {
           mediaParam[headerFormat.toLowerCase()] = {
-            id: mediaId.trim()
+            id: resolvedMediaId
           };
         } else {
           mediaParam[headerFormat.toLowerCase()] = {
@@ -278,9 +329,38 @@ function Templates() {
       parameters = [...parameters, ...bodyParamsList];
     }
 
+    const buildButtonParam = (parameterType, value) => {
+      const normalizedType = (parameterType || "text").toLowerCase();
+      if (normalizedType === "payload") {
+        return { type: "payload", payload: value };
+      }
+      if (normalizedType === "coupon_code") {
+        return { type: "coupon_code", coupon_code: value };
+      }
+      return { type: "text", text: value };
+    };
+
+    const buttonParameters = dynamicButtons
+      .map((button) => {
+        const key = toButtonInputKey(button);
+        const values = (buttonParamInputs[key] || []).map((v) => (v || "").trim()).filter(Boolean);
+        if (values.length === 0) return null;
+
+        return {
+          index: String(button.index),
+          subType: (button.type || "").toLowerCase(),
+          parameters: values.map((value) => buildButtonParam(button.parameterType, value))
+        };
+      })
+      .filter(Boolean);
+
     // Only add parameters if we have any
     if (parameters.length > 0) {
       payload.parameters = parameters;
+    }
+
+    if (buttonParameters.length > 0) {
+      payload.buttonParameters = buttonParameters;
     }
     
     // Log the payload for debugging
@@ -297,18 +377,34 @@ function Templates() {
         status: 'success',
         message: `Message sent successfully to ${res.data.sent} recipient(s)!`
       });
-      
-      // Clear the success message after 5 seconds
+
+      // Move to "View All Data" page after successful send.
       setTimeout(() => {
-        setSendResult(null);
-      }, 5000);
+        navigate('/existing-list');
+      }, 1000);
     } else if (res.data && res.data.status === 'partial_success') {
+      const firstError = Array.isArray(res.data.errors) && res.data.errors.length > 0
+        ? res.data.errors[0]
+        : null;
+      const errorHint = firstError
+        ? ` First error: ${firstError.error || "Unknown error"}`
+        : "";
       setSendResult({
         status: 'partial_success',
-        message: `Partially sent: ${res.data.sent} successful, ${res.data.failed} failed`
+        message: `Partially sent: ${res.data.sent} successful, ${res.data.failed} failed.${errorHint}`
       });
     } else {
-      setSendResult(res.data);
+      const firstError = Array.isArray(res.data?.errors) && res.data.errors.length > 0
+        ? res.data.errors[0]
+        : null;
+      const fallback = res.data?.message || "Failed to send message";
+      const errorHint = firstError
+        ? ` First error: ${firstError.error || "Unknown error"}`
+        : "";
+      setSendResult({
+        status: "error",
+        message: `${fallback}.${errorHint}`
+      });
     }
     } catch (e) {
       setSendResult({ 
@@ -322,47 +418,56 @@ function Templates() {
   };
 
   return (
-    <PageLayout shellClassName="shell-lg">
+    <PageLayout className="h-screen overflow-hidden" shellClassName="shell-lg h-full flex flex-col">
         <WorkspaceHeader
           title="Templates"
           subtitle="Choose a template, add variables, and send messages to selected recipients."
           backFallback="/existing-list"
         />
 
-        {/* Selected People Summary */}
-        <AppCard className="overflow-hidden mb-6">
-          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800">Selected People</h2>
-            <span className="text-xs text-gray-600">{selected.length} selected</span>
-          </div>
-          <div className="px-5 py-4">
-            {selected.length === 0 ? (
-              <div className="text-sm text-gray-600">
-                No selection received. Go back to the existing list and pick at least one person.
-                <button
-                  onClick={() => navigate("/existing-list")}
-                  className="ml-2 text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Go to Existing List
-                </button>
-              </div>
-            ) : (
-              <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {selected.map((u, idx) => (
-                  <li key={u.id ?? idx} className="flex items-center gap-3 p-3 border border-gray-200 rounded-md">
-                    <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-sm font-semibold">
-                      {(u.name || "?").charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{u.name || "-"}</div>
-                      <div className="text-xs text-gray-600">{u.email || "-"}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </AppCard>
+        <div className="min-h-0 flex-1 pb-6 grid grid-cols-1 xl:grid-cols-10 gap-4">
+          <AppCard className="h-full overflow-hidden flex flex-col xl:col-span-3">
+            <div className="px-5 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-800">Selected People</h2>
+              <p className="mt-1 text-xs text-gray-500">
+                {selected.length} recipient{selected.length === 1 ? "" : "s"} selected
+              </p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              {selected.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+                  <p className="text-sm text-gray-600">
+                    No people selected yet.
+                  </p>
+                  <AppButton
+                    onClick={() => navigate("/existing-list")}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    Go to Existing List
+                  </AppButton>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {selected.map((u, idx) => (
+                    <li key={u.id ?? `selected-${idx}`} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-white">
+                      <span className="h-8 w-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-sm font-semibold shrink-0">
+                        {(u.name || "?").charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{u.name || "-"}</p>
+                        <p className="text-xs text-gray-600 truncate">{u.phoneNo || "-"}</p>
+                        <p className="text-xs text-gray-500 truncate">{u.companyName || "-"}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </AppCard>
+
+          <div className="min-h-0 h-full overflow-auto xl:col-span-7 pr-1">
 
         {/* WhatsApp Templates */}
         <AppCard className="overflow-hidden">
@@ -407,7 +512,7 @@ function Templates() {
                       {t.body || "(No body)"}
                     </div>
                   </div>
-                  {(t.bodyParamCount > 0 || t.headerParamCount > 0) && (
+                  {(t.bodyParamCount > 0 || t.headerParamCount > 0 || t.buttonCount > 0) && (
                     <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1">
                       {Array.from({ length: t.bodyParamCount }).map((_, i) => (
                         <span key={i} className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-green-50 text-green-700 border border-green-100">
@@ -417,6 +522,11 @@ function Templates() {
                       {t.headerParamCount > 0 && (
                         <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 border border-amber-100">
                           Header {t.headerParamCount}
+                        </span>
+                      )}
+                      {t.buttonCount > 0 && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          Buttons {t.buttonCount}
                         </span>
                       )}
                     </div>
@@ -449,6 +559,42 @@ function Templates() {
                 {selectedTemplate.headerFormat && (
                   <div className="mt-2 text-xs text-gray-500">
                     Header format: {selectedTemplate.headerFormat}
+                  </div>
+                )}
+                {selectedTemplate.footer && (
+                  <div className="mt-2 text-xs text-gray-500">
+                    Footer: {selectedTemplate.footer}
+                  </div>
+                )}
+                {templateButtons.length > 0 && (
+                  <div className="mt-3">
+                    <div className="text-xs font-medium text-gray-700 mb-2">Buttons</div>
+                    <div className="flex flex-wrap gap-2">
+                      {templateButtons.map((button) => (
+                        <span
+                          key={`${button.index}-${button.type}`}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-md bg-white border border-indigo-100 text-indigo-700"
+                        >
+                          <span className="font-semibold">{button.text || `Button ${button.index + 1}`}</span>
+                          <span className="uppercase">({button.type || "BUTTON"})</span>
+                          {button.paramCount > 0 && <span>var: {button.paramCount}</span>}
+                        </span>
+                      ))}
+                    </div>
+                    {templateButtons.some((button) => button.url) && (
+                      <div className="mt-2 space-y-1">
+                        {templateButtons
+                          .filter((button) => button.url)
+                          .map((button) => (
+                            <div
+                              key={`button-url-${button.index}`}
+                              className="text-[11px] text-gray-600 break-all"
+                            >
+                              Button {button.index + 1} URL: {button.url}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 {headerFormat === "TEXT" && headerParamCount === 0 && (
@@ -633,40 +779,77 @@ function Templates() {
                   </div>
                 </div>
               )}
+
+              {/* Button Parameters */}
+              {dynamicButtons.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Button Variables
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      {dynamicButtons.length} dynamic button{dynamicButtons.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  <div className="space-y-4">
+                    {dynamicButtons.map((button) => {
+                      const key = toButtonInputKey(button);
+                      const values = buttonParamInputs[key] || [];
+                      return (
+                        <div key={`button-input-${key}`} className="p-3 rounded-lg border border-indigo-100 bg-indigo-50/40">
+                          <div className="text-xs font-medium text-indigo-800 mb-2">
+                            {button.text || `Button ${button.index + 1}`} ({button.type}){button.url ? ` - ${button.url}` : ""}
+                          </div>
+                          <div className="space-y-2">
+                            {Array.from({ length: button.paramCount }).map((_, paramIndex) => (
+                              <input
+                                key={`${key}-${paramIndex}`}
+                                type="text"
+                                value={values[paramIndex] || ""}
+                                onChange={(e) => {
+                                  const next = [...values];
+                                  next[paramIndex] = e.target.value;
+                                  setButtonParamInputs((prev) => ({
+                                    ...prev,
+                                    [key]: next
+                                  }));
+                                }}
+                                placeholder={`Enter value for button variable ${paramIndex + 1}`}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               
               {/* Send Button */}
               <div className="flex items-center justify-end gap-3">
                 {sendResult && (
-                  <div className={`text-sm p-3 rounded-md ${
-                    sendResult.status === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 
-                    sendResult.status === 'partial_success' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' : 
-                    'text-red-700 bg-red-50 border border-red-200'
-                  }`}>
-                    {sendResult.status === 'success' && (
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        {sendResult.message}
-                      </div>
-                    )}
-                    {sendResult.status === 'partial_success' && (
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        {sendResult.message}
-                      </div>
-                    )}
-                    {sendResult.status !== 'success' && sendResult.status !== 'partial_success' && (
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                        {sendResult.message}
-                      </div>
-                    )}
-                  </div>
+                  <AppAlert
+                    tone={
+                      sendResult.status === "success"
+                        ? "success"
+                        : sendResult.status === "partial_success"
+                          ? "warn"
+                          : "error"
+                    }
+                    title={
+                      sendResult.status === "success"
+                        ? "Message Sent"
+                        : sendResult.status === "partial_success"
+                          ? "Partial Success"
+                          : "Send Failed"
+                    }
+                    toastKey={`${sendResult.status}:${sendResult.message}`}
+                    onClose={() => setSendResult(null)}
+                  >
+                    {sendResult.message}
+                  </AppAlert>
                 )}
                 <AppButton
                   onClick={handleSend}
@@ -687,6 +870,9 @@ function Templates() {
             </div>
           </div>
         )}
+          </div>
+        </div>
+
     </PageLayout>
   );
 }

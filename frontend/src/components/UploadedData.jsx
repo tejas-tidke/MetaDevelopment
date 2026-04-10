@@ -23,6 +23,7 @@ function UploadedData() {
   const uploadMessage = location.state?.uploadMessage;
   const warningDetails = location.state?.warningDetails;
   const hasWarnings = errorRecords > 0 || Boolean(warningDetails);
+  const [showUploadToast, setShowUploadToast] = useState(Boolean(location.state?.fileName));
   
   // Protect this component from unauthorized access
   useAuthProtection();
@@ -120,7 +121,7 @@ function UploadedData() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout className="h-screen overflow-hidden" shellClassName="h-full flex flex-col">
         <WorkspaceHeader
           title="Uploaded Data"
           subtitle="Review imported records from your latest file before sending templates."
@@ -138,32 +139,18 @@ function UploadedData() {
         />
 
         {/* Success Message */}
-        {location.state?.fileName && (
-          <AppAlert tone={hasWarnings ? "warn" : "success"} className="mb-6">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                <svg className="h-4 w-4 text-green-500" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-2">
-                <h3 className="text-sm font-medium text-green-800">
-                  {hasWarnings ? "File Uploaded with Warnings" : "File Uploaded Successfully!"}
-                </h3>
-                <div className="mt-1 text-green-700 text-xs">
-                  <p>
-                    {uploadMessage || (
-                      <>
-                        File "<span className="font-semibold">{location.state.fileName}</span>" has been processed.
-                        {processedRecords > 0 && ` ${processedRecords} records imported.`}
-                        {errorRecords > 0 && ` ${errorRecords} rows were skipped.`}
-                      </>
-                    )}
-                  </p>
-                  {warningDetails && <p className="mt-1 break-words">{warningDetails}</p>}
-                </div>
-              </div>
-            </div>
+        {showUploadToast && location.state?.fileName && (
+          <AppAlert
+            tone={hasWarnings ? "warn" : "success"}
+            title={hasWarnings ? "File Uploaded with Warnings" : "File Uploaded Successfully"}
+            toastKey={`uploaded-data:${fileId}:${hasWarnings ? "warn" : "success"}:${uploadMessage || ""}`}
+            onClose={() => setShowUploadToast(false)}
+          >
+            {uploadMessage ||
+              `File "${location.state.fileName}" has been processed. ${
+                processedRecords > 0 ? `${processedRecords} records imported. ` : ""
+              }${errorRecords > 0 ? `${errorRecords} rows were skipped.` : ""}`}
+            {warningDetails ? ` ${warningDetails}` : ""}
           </AppAlert>
         )}
 
@@ -213,7 +200,8 @@ function UploadedData() {
         </div>
 
         {/* Data Table */}
-        <AppCard className="overflow-hidden">
+        <div className="min-h-0 flex-1 pb-6">
+        <AppCard className="h-full overflow-hidden flex flex-col">
           <div className="px-5 py-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Uploaded User Details</h2>
@@ -238,21 +226,23 @@ function UploadedData() {
           </div>
           
           {loading ? (
-            renderLoading()
+            <div className="min-h-0 flex-1 overflow-auto">{renderLoading()}</div>
           ) : error ? (
-            renderError(error)
+            <div className="min-h-0 flex-1 overflow-auto">{renderError(error)}</div>
           ) : filteredDetails.length === 0 ? (
-            <div className="p-8 text-center">
-              <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h3 className="mt-3 text-sm font-medium text-gray-900">No user details found</h3>
-              <p className="mt-1 text-gray-500 text-xs">
-                {searchTerm ? "No records match your search criteria." : "No user details found in the uploaded file."}
-              </p>
+            <div className="min-h-0 flex-1 overflow-auto">
+              <div className="p-8 text-center">
+                <svg className="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="mt-3 text-sm font-medium text-gray-900">No user details found</h3>
+                <p className="mt-1 text-gray-500 text-xs">
+                  {searchTerm ? "No records match your search criteria." : "No user details found in the uploaded file."}
+                </p>
+              </div>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="min-h-0 flex-1 overflow-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -326,26 +316,23 @@ function UploadedData() {
           )}
           
           {!loading && !error && filteredDetails.length > 0 && (
-            <div className="bg-gray-50 px-5 py-3 border-t border-gray-200">
+            <div className="bg-gray-50 px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-3">
               <p className="text-xs text-gray-700">
                 Showing <span className="font-medium">{filteredDetails.length}</span> of{' '}
                 <span className="font-medium">{userDetails.length}</span> records
               </p>
+              {location.state?.fileId && (
+                <AppButton
+                  onClick={() => navigate('/templates', { state: { fileId: location.state.fileId } })}
+                  variant="primary"
+                >
+                  Continue to Templates
+                </AppButton>
+              )}
             </div>
           )}
         </AppCard>
-      
-        {/* Continue Button */}
-        {location.state?.fileId && filteredDetails.length > 0 && (
-          <div className="mt-6 flex justify-end">
-            <AppButton
-              onClick={() => navigate('/templates', { state: { fileId: location.state.fileId } })}
-              variant="primary"
-            >
-              Continue to Templates
-            </AppButton>
-          </div>
-        )}
+        </div>
     </PageLayout>
   );
 }

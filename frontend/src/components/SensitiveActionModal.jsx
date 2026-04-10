@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { reauthenticate, deleteAccount, updateUserEmail, updateUserPassword } from "../services/authService";
+import AuthAlert from "./ui/AuthAlert";
 
 function SensitiveActionModal({ 
   actionType, 
@@ -216,9 +217,14 @@ function SensitiveActionModal({
             )}
             
             {message && (
-              <div className={`mb-4 auth-alert ${message.includes("success") ? "success" : "error"}`}>
+              <AuthAlert
+                tone={message.includes("success") ? "success" : "error"}
+                title={message.includes("success") ? "Success" : "Error"}
+                toastKey={message}
+                onClose={() => setMessage("")}
+              >
                 {message}
-              </div>
+              </AuthAlert>
             )}
             
             <div className="auth-modal-actions">

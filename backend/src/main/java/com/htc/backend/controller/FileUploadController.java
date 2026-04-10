@@ -5,12 +5,21 @@ import com.htc.backend.entity.UserDetails;
 import com.htc.backend.service.FileStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,6 +27,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import jakarta.annotation.PostConstruct;
@@ -31,9 +41,18 @@ public class FileUploadController {
     
     @Autowired
     private FileStorageService fileStorageService;
+
+    @Autowired
+    private RestTemplate restTemplate;
     
     @Value("${file.upload-dir:uploads}")
     private String uploadDir;
+
+    @Value("${waba.phone-number-id:}")
+    private String wabaPhoneNumberId;
+
+    @Value("${waba.access-token:}")
+    private String wabaAccessToken;
     
     @PostConstruct
     public void init() {
@@ -51,8 +70,45 @@ public class FileUploadController {
     }
 
     // For user data files (CSV/Excel)
+    @PostMapping("/upload/check-duplicates")
+    public ResponseEntity<?> checkDuplicates(@RequestParam("file") MultipartFile file) {
+        log.info("checkDuplicates endpoint called with file: {}", file != null ? file.getOriginalFilename() : "null");
+        try {
+            if (file == null || file.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "status", "error",
+                        "message", "File is empty"
+                ));
+            }
+
+            FileStorageService.DuplicateCheckResult result = fileStorageService.checkDuplicates(file);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", result.getTotalDuplicates() > 0 ? "duplicates_found" : "success");
+            response.put("message",
+                    result.getTotalDuplicates() > 0
+                            ? "Duplicate contacts found in file."
+                            : "No duplicates found.");
+            response.put("duplicateInFileCount", result.getDuplicateInFileCount());
+            response.put("duplicateInDatabaseCount", result.getDuplicateInDatabaseCount());
+            response.put("totalDuplicates", result.getTotalDuplicates());
+            response.put("duplicateDetails", result.getDuplicateDetails());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error checking duplicates:", e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", "Error checking duplicates: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    // For user data files (CSV/Excel)
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(name = "keepDuplicates", defaultValue = "false") boolean keepDuplicates
+    ) {
         log.info("uploadFile endpoint called with file: {}", file != null ? file.getOriginalFilename() : "null");
         try {
             log.info("=== USER DATA UPLOAD ENDPOINT HIT ===");
@@ -83,7 +139,7 @@ public class FileUploadController {
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
             
             // Process the file and save to database
-            UploadedFile uploadedFile = fileStorageService.processFile(file);
+            UploadedFile uploadedFile = fileStorageService.processFile(file, keepDuplicates);
             log.info("File processed successfully. Uploaded file ID: {}", uploadedFile.getId());
             
             // Prepare response
@@ -109,6 +165,7 @@ public class FileUploadController {
 
             response.put("processedRecords", processedRecords);
             response.put("skippedRecords", skippedRecords);
+            response.put("keepDuplicates", keepDuplicates);
             response.put("file", uploadedFile);
             
             return ResponseEntity.ok(response);
@@ -163,15 +220,25 @@ public class FileUploadController {
             
             // Save to database
             uploadedFile = fileStorageService.saveUploadedFile(uploadedFile);
+
+            // Upload to WhatsApp Cloud API to get a media ID (preferred over local URL links)
+            String whatsappMediaId = uploadMediaToWhatsApp(file);
             
             // Prepare response
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("message", "Media file uploaded successfully");
+            response.put("mediaId", whatsappMediaId);
             response.put("file", uploadedFile);
             
             return ResponseEntity.ok(response);
-            
+        } catch (HttpClientErrorException e) {
+            log.error("WhatsApp media API error:", e);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", "WhatsApp media upload failed: " + e.getStatusCode().value());
+            errorResponse.put("details", e.getResponseBodyAsString());
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(errorResponse);
         } catch (Exception e) {
             log.error("Error uploading media file:", e);
             Map<String, Object> errorResponse = new HashMap<>();
@@ -179,6 +246,44 @@ public class FileUploadController {
             errorResponse.put("message", "Error uploading media file: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
+    }
+
+    private String uploadMediaToWhatsApp(MultipartFile file) throws IOException {
+        if (wabaPhoneNumberId == null || wabaPhoneNumberId.isBlank() || wabaAccessToken == null || wabaAccessToken.isBlank()) {
+            throw new IllegalStateException("WABA configuration missing. Set 'waba.phone-number-id' and 'waba.access-token'.");
+        }
+
+        String uploadUrl = String.format("https://graph.facebook.com/v19.0/%s/media", wabaPhoneNumberId);
+        String detectedType = file.getContentType() != null ? file.getContentType() : MediaType.APPLICATION_OCTET_STREAM_VALUE;
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(wabaAccessToken);
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+        ByteArrayResource fileResource = new ByteArrayResource(file.getBytes()) {
+            @Override
+            public String getFilename() {
+                return Objects.requireNonNullElse(file.getOriginalFilename(), "media.bin");
+            }
+        };
+
+        HttpHeaders partHeaders = new HttpHeaders();
+        partHeaders.setContentType(MediaType.parseMediaType(detectedType));
+        HttpEntity<ByteArrayResource> filePart = new HttpEntity<>(fileResource, partHeaders);
+
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("messaging_product", "whatsapp");
+        body.add("type", detectedType);
+        body.add("file", filePart);
+
+        HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+        ResponseEntity<Map> response = restTemplate.postForEntity(uploadUrl, requestEntity, Map.class);
+
+        if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null || response.getBody().get("id") == null) {
+            throw new IllegalStateException("No media ID returned from WhatsApp");
+        }
+
+        return String.valueOf(response.getBody().get("id"));
     }
     
     @GetMapping("/files")
