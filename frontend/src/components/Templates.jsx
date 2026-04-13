@@ -519,499 +519,498 @@ function Templates() {
 
   return (
     <PageLayout className="h-screen overflow-hidden" shellClassName="shell-xl h-full flex flex-col">
-        <WorkspaceHeader
-          title="Templates"
-          subtitle="Choose a template, add variables, and send messages to selected recipients."
-          backFallback="/existing-list"
-        />
+      <WorkspaceHeader
+        title="Templates"
+        subtitle="Choose a template, add variables, and send messages to selected recipients."
+        backFallback="/existing-list"
+      />
 
-        <div className="min-h-0 flex-1 pb-6 grid grid-cols-1 xl:grid-cols-12 gap-4">
-          <AppCard className="overflow-hidden flex flex-col self-start xl:col-span-3">
-            <div className="px-5 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-800">Selected People</h2>
-              <p className="mt-1 text-xs text-gray-500">
-                {selected.length} recipient{selected.length === 1 ? "" : "s"} selected
-              </p>
-            </div>
-
-            <div className="p-4">
-              {selected.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center gap-3">
-                  <p className="text-sm text-gray-600">
-                    No people selected yet.
-                  </p>
-                  <AppButton
-                    onClick={() => navigate("/existing-list")}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    Go to Existing List
-                  </AppButton>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {selected.map((u, idx) => (
-                    <li key={u.id ?? `selected-${idx}`} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-white">
-                      <span className="h-8 w-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-sm font-semibold shrink-0">
-                        {(u.name || "?").charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{u.name || "-"}</p>
-                        <p className="text-xs text-gray-600 truncate">{u.phoneNo || "-"}</p>
-                        <p className="text-xs text-gray-500 truncate">{u.companyName || "-"}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </AppCard>
-
-          <div className="min-h-0 h-full overflow-auto xl:col-span-9 pr-1">
-        <div className={`grid grid-cols-1 ${selectedTemplate ? "xl:grid-cols-[1.4fr_1fr]" : ""} gap-4 items-start`}>
-
-        {/* WhatsApp Templates */}
-        <AppCard className={`overflow-hidden ${selectedTemplate ? "h-full" : ""}`}>
-          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-800">WhatsApp Templates</h2>
-            <span className="text-xs text-gray-600">{templates.length} available</span>
+      <div className="min-h-0 flex-1 pb-6 grid grid-cols-1 xl:grid-cols-12 gap-4">
+        <AppCard className="overflow-hidden flex flex-col self-start xl:col-span-3">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800">Selected People</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              {selected.length} recipient{selected.length === 1 ? "" : "s"} selected
+            </p>
           </div>
-          {tplLoading ? (
-            <div className="p-6 flex items-center gap-2 text-gray-600 text-sm">
-              <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500"></div>
-              Loading templates...
-            </div>
-          ) : tplError ? (
-            <div className="p-6 text-sm text-red-700 bg-red-50 border border-red-200">{tplError}</div>
-          ) : templates.length === 0 ? (
-            <div className="p-6 text-sm text-gray-600">No templates found for your account.</div>
-          ) : (
-            <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {templates.map((t, idx) => (
-                <div
-                  key={(t.name || "template") + "-" + idx}
-                  onClick={() => setSelectedTemplate(t)}
-                  className={`cursor-pointer bg-white rounded-xl shadow p-5 border ${
-                    selectedTemplate?.name === t.name ? "border-blue-500 ring-1 ring-blue-300" : "border-gray-100"
-                  } hover:shadow-md transition`}
-                  title={t.body}
-                >
-                  <div className="flex items-start justify-between">
-                    <h3 className="text-base font-semibold text-gray-900">{t.name || "(Unnamed)"}</h3>
-                    <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-700">{t.language || "-"}</span>
-                  </div>
-                  <div className="mt-1 text-[11px] text-gray-500 capitalize flex items-center gap-2">
-                    <span>{t.category || ""}</span>
-                    {t.headerFormat && (
-                      <span className="inline-flex items-center px-1 py-0.5 text-[10px] rounded bg-blue-50 text-blue-700 border border-blue-100">
-                        header: {t.headerFormat}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-3 text-sm text-gray-700">
-                    <div className="max-h-16 overflow-hidden whitespace-pre-wrap">
-                      {t.body || "(No body)"}
-                    </div>
-                  </div>
-                  {(t.bodyParamCount > 0 || t.headerParamCount > 0 || t.buttonCount > 0) && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1">
-                      {Array.from({ length: t.bodyParamCount }).map((_, i) => (
-                        <span key={i} className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-green-50 text-green-700 border border-green-100">
-                          Body {i + 1}
-                        </span>
-                      ))}
-                      {t.headerParamCount > 0 && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 border border-amber-100">
-                          Header {t.headerParamCount}
-                        </span>
-                      )}
-                      {t.buttonCount > 0 && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          Buttons {t.buttonCount}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </AppCard>
 
-        {/* Template Preview and Send Form */}
-        {selectedTemplate && (
-          <div className="workspace-card overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-800">Send Message</h2>
-              <button
-                onClick={() => setSelectedTemplate(null)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <div className="p-5">
-              <div className="mb-6">
-                <div className="text-sm font-medium text-gray-900 mb-2">Template Preview</div>
-                <div
-                  className="rounded-2xl border border-gray-200 p-3"
-                  style={{
-                    backgroundColor: "#e9e4dd",
-                    backgroundImage:
-                      "radial-gradient(circle at 20% 20%, rgba(0,0,0,0.04) 1px, transparent 1px), radial-gradient(circle at 80% 80%, rgba(0,0,0,0.035) 1px, transparent 1px)",
-                    backgroundSize: "18px 18px, 22px 22px"
-                  }}
-                >
-                  <div className="mx-auto max-w-[320px] rounded-[12px] border border-[#d7d7d7] bg-[#f8f8f8] shadow-[0_1px_2px_rgba(0,0,0,0.08)] overflow-hidden">
-                    <div className="px-3 py-3 bg-[#f7f7f7]">
-                      {headerFormat === "IMAGE" && (
-                        <div className="mb-3 rounded-md overflow-hidden border border-slate-200 bg-white">
-                          {previewUrl ? (
-                            <img
-                              src={previewUrl}
-                              alt="Template header preview"
-                              className="w-full max-h-56 object-contain bg-white"
-                            />
-                          ) : (
-                            <div className="h-36 flex items-center justify-center text-[12px] text-slate-500 px-3 text-center">
-                              {mediaId.trim()
-                                ? "Image selected via Media ID. Upload image file to see preview."
-                                : "Upload an image to preview header."}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="text-[14px] leading-7 text-[#1f2937] whitespace-pre-line">
-                        {previewHeaderText ? `${previewHeaderText}\n\n${previewBodyText}` : previewBodyText}
-                      </div>
-                      <div className="mt-2 flex items-end justify-between text-[12px] text-[#7b8490]">
-                        <span className="truncate pr-2">{selectedTemplate.footer || ""}</span>
-                        <span className="shrink-0">{previewTime}</span>
-                      </div>
-                    </div>
-
-                    {previewButtons.length > 0 && (
-                      <div className="border-t border-[#d5d5d5] bg-[#f7f7f7] divide-y divide-[#e0e0e0]">
-                        {previewButtons.map((button) => (
-                          <button
-                            key={`preview-button-${button.index}`}
-                            type="button"
-                            className="w-full px-3 py-2 flex items-center justify-center gap-2 text-[#1185e0] hover:bg-[#f1f1f1] transition-colors"
-                            title={button.resolvedUrl || button.url || ""}
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5h5m0 0v5m0-5L10 14" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12v7h7" />
-                            </svg>
-                            <span className="text-[16px] font-medium leading-none">
-                              {button.text || `Button ${button.index + 1}`}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {previewButtons.some((button) => button.url) && (
-                  <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <div className="text-[11px] font-medium text-slate-700 mb-1">Button URL(s)</div>
-                    <div className="space-y-1">
-                      {previewButtons
-                        .filter((button) => button.url)
-                        .map((button) => (
-                          <div key={`preview-url-${button.index}`} className="text-[11px] text-slate-600 break-all">
-                            Button {button.index + 1}: {button.resolvedUrl || button.url}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {headerFormat === "TEXT" && headerParamCount === 0 && (
-                  <div className="mt-2 text-xs text-emerald-700">
-                    This template uses a fixed header. No header input is required.
-                  </div>
-                )}
-              </div>
-              
-              {/* Header Input */}
-              {requiresHeaderInput && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Header Content
-                    </label>
-                    <span className="text-xs text-gray-500">
-                      {headerFormat} {hasDynamicTextHeader ? `(${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''})` : ''}
-                    </span>
-                  </div>
-                  
-                  {hasDynamicTextHeader ? (
-                    <input
-                      type="text"
-                      value={headerText}
-                      onChange={e => setHeaderText(e.target.value)}
-                      placeholder={`Enter header text with ${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''}`}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    />
-                  ) : (
-                    <div className="space-y-3">
-                      {/* Media ID input */}
-                      <div className="mb-3">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Media ID (optional)
-                        </label>
-                        <input
-                          type="text"
-                          value={mediaId}
-                          onChange={e => {
-                            setMediaId(e.target.value);
-                            // Clear file selection when media ID is entered
-                            if (e.target.value.trim()) {
-                              setHeaderMediaFile(null);
-                              setHeaderMediaUrl("");
-                              setPreviewUrl("");
-                              const fileInput = document.getElementById('banner-upload');
-                              if (fileInput) fileInput.value = '';
-                            }
-                          }}
-                          placeholder="Enter pre-existing media ID (e.g., 774955485440022)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          If you have a pre-existing media ID, enter it above. Otherwise, upload a file below.
-                        </p>
-                      </div>
-                      
-                      {/* File upload section */}
-                      <div className={`border-t pt-3 ${mediaId.trim() ? 'opacity-50 pointer-events-none' : ''}`}>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Or Upload Media File
-                        </label>
-                        <div className="flex items-center justify-center w-full">
-                          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                              {previewUrl ? (
-                                <div className="relative">
-                                  <img src={previewUrl} alt="Preview" className="h-16 w-auto rounded" />
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleRemoveImage();
-                                    }}
-                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                                  >
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              ) : (
-                                <>
-                                  <svg className="w-8 h-8 mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                  </svg>
-                                  <p className="mb-1 text-sm text-gray-500">
-                                    <span className="font-semibold">Click to upload</span>
-                                  </p>
-                                  <p className="text-xs text-gray-500">
-                                    {headerFormat === "IMAGE" ? "PNG, JPG (MAX. 5MB)" : 
-                                     headerFormat === "VIDEO" ? "MP4, 3GPP (MAX. 16MB)" : 
-                                     "PDF, DOCX, PPTX, XLSX (MAX. 100MB)"}
-                                  </p>
-                                </>
-                              )}
-                            </div>
-                            <input 
-                              id="banner-upload"
-                              type="file"
-                              className="hidden"
-                              accept={headerFormat === "IMAGE" ? "image/*" : 
-                                     headerFormat === "VIDEO" ? "video/*" : 
-                                     ".pdf,.docx,.pptx,.xlsx"}
-                              onChange={handleFileUpload}
-                              disabled={!!mediaId.trim()} // Disable file upload when media ID is provided
-                            />
-                          </label>
-                        </div>
-                      </div>
-                      
-                      {headerFormat === "DOCUMENT" && (
-                        <input
-                          type="text"
-                          value={headerMediaFilename}
-                          onChange={e => setHeaderMediaFilename(e.target.value)}
-                          placeholder="Optional document filename (e.g. Offer.pdf)"
-                          className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
-                        />
-                      )}
-                      <div className="text-[11px] text-gray-500">
-                        {headerFormat === "IMAGE" 
-                          ? "Upload an image (max 5MB, JPG/PNG/WebP)" 
-                          : headerFormat === "DOCUMENT"
-                            ? "Upload a document (max 100MB, PDF/DOCX/PPTX/XLSX)"
-                            : "Upload a video (max 16MB, MP4/3GPP)"}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Body Parameters */}
-              {bodyParamCount > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Body Variables
-                    </label>
-                    <span className="text-xs text-gray-500">
-                      {personalizeWithUserData && bodyParamCount > 0 ? bodyParamCount - 1 : bodyParamCount} variable{bodyParamCount !== 1 ? 's' : ''} 
-                      {personalizeWithUserData && bodyParamCount > 0 ? ' (excluding auto-filled name)' : ''}
-                    </span>
-                  </div>
-                  
-                  {/* Personalization option */}
-                  <div className="mb-3">
-                    <label className="inline-flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={personalizeWithUserData}
-                        onChange={(e) => setPersonalizeWithUserData(e.target.checked)}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">
-                        Personalize with user data (replaces &#123;&#123;1&#125;&#125; with user's name)
-                      </span>
-                    </label>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {bodyParams.map((param, index) => (
-                      <div key={index}>
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Variable {personalizeWithUserData ? index + 2 : index + 1}
-                        </label>
-                        <input
-                          type="text"
-                          value={param}
-                          onChange={e => {
-                            const newParams = [...bodyParams];
-                            newParams[index] = e.target.value;
-                            setBodyParams(newParams);
-                          }}
-                          placeholder={`Enter value for variable ${personalizeWithUserData ? index + 2 : index + 1}`}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Button Parameters */}
-              {dynamicButtons.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Button Variables
-                    </label>
-                    <span className="text-xs text-gray-500">
-                      {dynamicButtons.length} dynamic button{dynamicButtons.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-
-                  <div className="space-y-4">
-                    {dynamicButtons.map((button) => {
-                      const key = toButtonInputKey(button);
-                      const values = buttonParamInputs[key] || [];
-                      return (
-                        <div key={`button-input-${key}`} className="p-3 rounded-lg border border-indigo-100 bg-indigo-50/40">
-                          <div className="text-xs font-medium text-indigo-800 mb-2">
-                            {button.text || `Button ${button.index + 1}`} ({button.type}){button.url ? ` - ${button.url}` : ""}
-                          </div>
-                          <div className="space-y-2">
-                            {Array.from({ length: button.paramCount }).map((_, paramIndex) => (
-                              <input
-                                key={`${key}-${paramIndex}`}
-                                type="text"
-                                value={values[paramIndex] || ""}
-                                onChange={(e) => {
-                                  const next = [...values];
-                                  next[paramIndex] = e.target.value;
-                                  setButtonParamInputs((prev) => ({
-                                    ...prev,
-                                    [key]: next
-                                  }));
-                                }}
-                                placeholder={`Enter value for button variable ${paramIndex + 1}`}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              
-              {/* Send Button */}
-              <div className="flex items-center justify-end gap-3">
-                {sendResult && (
-                  <AppAlert
-                    tone={
-                      sendResult.status === "success"
-                        ? "success"
-                        : sendResult.status === "partial_success"
-                          ? "warn"
-                          : "error"
-                    }
-                    title={
-                      sendResult.status === "success"
-                        ? "Message Sent"
-                        : sendResult.status === "partial_success"
-                          ? "Partial Success"
-                          : "Send Failed"
-                    }
-                    toastKey={`${sendResult.status}:${sendResult.message}`}
-                    onClose={() => setSendResult(null)}
-                  >
-                    {sendResult.message}
-                  </AppAlert>
-                )}
+          <div className="p-4">
+            {selected.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+                <p className="text-sm text-gray-600">
+                  No people selected yet.
+                </p>
                 <AppButton
-                  onClick={handleSend}
-                  disabled={!canSend}
-                  variant="primary"
+                  onClick={() => navigate("/existing-list")}
+                  variant="secondary"
+                  size="sm"
                 >
-                  {sending ? (
-                    <span className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Sending...
-                    </span>
-                  ) : 'Send Message'}
+                  Go to Existing List
                 </AppButton>
               </div>
+            ) : (
+              <ul className="space-y-2">
+                {selected.map((u, idx) => (
+                  <li key={u.id ?? `selected-${idx}`} className="flex items-start gap-3 p-3 border border-gray-200 rounded-lg bg-white">
+                    <span className="h-8 w-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-sm font-semibold shrink-0">
+                      {(u.name || "?").charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{u.name || "-"}</p>
+                      <p className="text-xs text-gray-600 truncate">{u.phoneNo || "-"}</p>
+                      <p className="text-xs text-gray-500 truncate">{u.companyName || "-"}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </AppCard>
+
+        <div className="min-h-0 h-full overflow-auto xl:col-span-9 pr-1">
+          <AppCard className="overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-800">WhatsApp Templates</h2>
+              <span className="text-xs text-gray-600">{templates.length} available</span>
+            </div>
+            {tplLoading ? (
+              <div className="p-6 flex items-center gap-2 text-gray-600 text-sm">
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500"></div>
+                Loading templates...
+              </div>
+            ) : tplError ? (
+              <div className="p-6 text-sm text-red-700 bg-red-50 border border-red-200">{tplError}</div>
+            ) : templates.length === 0 ? (
+              <div className="p-6 text-sm text-gray-600">No templates found for your account.</div>
+            ) : (
+              <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                {templates.map((t, idx) => (
+                  <div
+                    key={(t.name || "template") + "-" + idx}
+                    onClick={() => setSelectedTemplate(t)}
+                    className={`cursor-pointer bg-white rounded-xl shadow p-5 border ${
+                      selectedTemplate?.name === t.name ? "border-blue-500 ring-1 ring-blue-300" : "border-gray-100"
+                    } hover:shadow-md transition`}
+                    title={t.body}
+                  >
+                    <div className="flex items-start justify-between">
+                      <h3 className="text-base font-semibold text-gray-900">{t.name || "(Unnamed)"}</h3>
+                      <span className="ml-2 px-1.5 py-0.5 text-[10px] rounded bg-gray-100 text-gray-700">{t.language || "-"}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-gray-500 capitalize flex items-center gap-2">
+                      <span>{t.category || ""}</span>
+                      {t.headerFormat && (
+                        <span className="inline-flex items-center px-1 py-0.5 text-[10px] rounded bg-blue-50 text-blue-700 border border-blue-100">
+                          header: {t.headerFormat}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 text-sm text-gray-700">
+                      <div className="max-h-16 overflow-hidden whitespace-pre-wrap">
+                        {t.body || "(No body)"}
+                      </div>
+                    </div>
+                    {(t.bodyParamCount > 0 || t.headerParamCount > 0 || t.buttonCount > 0) && (
+                      <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1">
+                        {Array.from({ length: t.bodyParamCount }).map((_, i) => (
+                          <span key={i} className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-green-50 text-green-700 border border-green-100">
+                            Body {i + 1}
+                          </span>
+                        ))}
+                        {t.headerParamCount > 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-amber-50 text-amber-700 border border-amber-100">
+                            Header {t.headerParamCount}
+                          </span>
+                        )}
+                        {t.buttonCount > 0 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            Buttons {t.buttonCount}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </AppCard>
+        </div>
+      </div>
+
+      {selectedTemplate && (
+        <div className="fixed inset-0 z-40 bg-slate-900/50 p-3 sm:p-6">
+          <div className="mx-auto h-full max-w-7xl">
+            <div className="workspace-card h-full overflow-hidden flex flex-col">
+              <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div className="min-w-0 pr-4">
+                  <h2 className="text-lg font-semibold text-gray-800 truncate">{selectedTemplate.name || "Template Details"}</h2>
+                  <p className="text-xs text-gray-500 mt-1">Preview on the left and all template variables on the right.</p>
+                </div>
+                <button
+                  onClick={() => setSelectedTemplate(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Close template modal"
+                  title="Close"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 grid grid-cols-1 xl:grid-cols-[1.1fr_1fr]">
+                <div className="min-h-0 overflow-auto p-5 border-b xl:border-b-0 xl:border-r border-gray-200">
+                  <div className="text-sm font-medium text-gray-900 mb-2">Template Preview</div>
+                  <div
+                    className="rounded-2xl border border-gray-200 p-3"
+                    style={{
+                      backgroundColor: "#e9e4dd",
+                      backgroundImage:
+                        "radial-gradient(circle at 20% 20%, rgba(0,0,0,0.04) 1px, transparent 1px), radial-gradient(circle at 80% 80%, rgba(0,0,0,0.035) 1px, transparent 1px)",
+                      backgroundSize: "18px 18px, 22px 22px"
+                    }}
+                  >
+                    <div className="mx-auto max-w-[320px] rounded-[12px] border border-[#d7d7d7] bg-[#f8f8f8] shadow-[0_1px_2px_rgba(0,0,0,0.08)] overflow-hidden">
+                      <div className="px-3 py-3 bg-[#f7f7f7]">
+                        {headerFormat === "IMAGE" && (
+                          <div className="mb-3 rounded-md overflow-hidden border border-slate-200 bg-white">
+                            {previewUrl ? (
+                              <img
+                                src={previewUrl}
+                                alt="Template header preview"
+                                className="w-full max-h-56 object-contain bg-white"
+                              />
+                            ) : (
+                              <div className="h-36 flex items-center justify-center text-[12px] text-slate-500 px-3 text-center">
+                                {mediaId.trim()
+                                  ? "Image selected via Media ID. Upload image file to see preview."
+                                  : "Upload an image to preview header."}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="text-[14px] leading-7 text-[#1f2937] whitespace-pre-line">
+                          {previewHeaderText ? `${previewHeaderText}\n\n${previewBodyText}` : previewBodyText}
+                        </div>
+                        <div className="mt-2 flex items-end justify-between text-[12px] text-[#7b8490]">
+                          <span className="truncate pr-2">{selectedTemplate.footer || ""}</span>
+                          <span className="shrink-0">{previewTime}</span>
+                        </div>
+                      </div>
+
+                      {previewButtons.length > 0 && (
+                        <div className="border-t border-[#d5d5d5] bg-[#f7f7f7] divide-y divide-[#e0e0e0]">
+                          {previewButtons.map((button) => (
+                            <button
+                              key={`preview-button-${button.index}`}
+                              type="button"
+                              className="w-full px-3 py-2 flex items-center justify-center gap-2 text-[#1185e0] hover:bg-[#f1f1f1] transition-colors"
+                              title={button.resolvedUrl || button.url || ""}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5h5m0 0v5m0-5L10 14" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12v7h7" />
+                              </svg>
+                              <span className="text-[16px] font-medium leading-none">
+                                {button.text || `Button ${button.index + 1}`}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {previewButtons.some((button) => button.url) && (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                      <div className="text-[11px] font-medium text-slate-700 mb-1">Button URL(s)</div>
+                      <div className="space-y-1">
+                        {previewButtons
+                          .filter((button) => button.url)
+                          .map((button) => (
+                            <div key={`preview-url-${button.index}`} className="text-[11px] text-slate-600 break-all">
+                              Button {button.index + 1}: {button.resolvedUrl || button.url}
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {headerFormat === "TEXT" && headerParamCount === 0 && (
+                    <div className="mt-2 text-xs text-emerald-700">
+                      This template uses a fixed header. No header input is required.
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-h-0 overflow-auto p-5 space-y-6">
+                  {requiresHeaderInput && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Header Content
+                        </label>
+                        <span className="text-xs text-gray-500">
+                          {headerFormat} {hasDynamicTextHeader ? `(${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''})` : ''}
+                        </span>
+                      </div>
+
+                      {hasDynamicTextHeader ? (
+                        <input
+                          type="text"
+                          value={headerText}
+                          onChange={e => setHeaderText(e.target.value)}
+                          placeholder={`Enter header text with ${headerParamCount} variable${headerParamCount !== 1 ? 's' : ''}`}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        />
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Media ID (optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={mediaId}
+                              onChange={e => {
+                                setMediaId(e.target.value);
+                                if (e.target.value.trim()) {
+                                  setHeaderMediaFile(null);
+                                  setHeaderMediaUrl("");
+                                  setPreviewUrl("");
+                                  const fileInput = document.getElementById('banner-upload');
+                                  if (fileInput) fileInput.value = '';
+                                }
+                              }}
+                              placeholder="Enter pre-existing media ID (e.g., 774955485440022)"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              If you have a pre-existing media ID, enter it above. Otherwise, upload a file below.
+                            </p>
+                          </div>
+
+                          <div className={`border-t pt-3 ${mediaId.trim() ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Or Upload Media File
+                            </label>
+                            <div className="flex items-center justify-center w-full">
+                              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                  {previewUrl ? (
+                                    <div className="relative">
+                                      <img src={previewUrl} alt="Preview" className="h-16 w-auto rounded" />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          handleRemoveImage();
+                                        }}
+                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <svg className="w-8 h-8 mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                      </svg>
+                                      <p className="mb-1 text-sm text-gray-500">
+                                        <span className="font-semibold">Click to upload</span>
+                                      </p>
+                                      <p className="text-xs text-gray-500">
+                                        {headerFormat === "IMAGE" ? "PNG, JPG (MAX. 5MB)" :
+                                         headerFormat === "VIDEO" ? "MP4, 3GPP (MAX. 16MB)" :
+                                         "PDF, DOCX, PPTX, XLSX (MAX. 100MB)"}
+                                      </p>
+                                    </>
+                                  )}
+                                </div>
+                                <input
+                                  id="banner-upload"
+                                  type="file"
+                                  className="hidden"
+                                  accept={headerFormat === "IMAGE" ? "image/*" :
+                                         headerFormat === "VIDEO" ? "video/*" :
+                                         ".pdf,.docx,.pptx,.xlsx"}
+                                  onChange={handleFileUpload}
+                                  disabled={!!mediaId.trim()}
+                                />
+                              </label>
+                            </div>
+                          </div>
+
+                          {headerFormat === "DOCUMENT" && (
+                            <input
+                              type="text"
+                              value={headerMediaFilename}
+                              onChange={e => setHeaderMediaFilename(e.target.value)}
+                              placeholder="Optional document filename (e.g. Offer.pdf)"
+                              className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                            />
+                          )}
+                          <div className="text-[11px] text-gray-500">
+                            {headerFormat === "IMAGE"
+                              ? "Upload an image (max 5MB, JPG/PNG/WebP)"
+                              : headerFormat === "DOCUMENT"
+                                ? "Upload a document (max 100MB, PDF/DOCX/PPTX/XLSX)"
+                                : "Upload a video (max 16MB, MP4/3GPP)"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {bodyParamCount > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Body Variables
+                        </label>
+                        <span className="text-xs text-gray-500">
+                          {personalizeWithUserData && bodyParamCount > 0 ? bodyParamCount - 1 : bodyParamCount} variable{bodyParamCount !== 1 ? 's' : ''}
+                          {personalizeWithUserData && bodyParamCount > 0 ? ' (excluding auto-filled name)' : ''}
+                        </span>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="inline-flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={personalizeWithUserData}
+                            onChange={(e) => setPersonalizeWithUserData(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            Personalize with user data (replaces &#123;&#123;1&#125;&#125; with user's name)
+                          </span>
+                        </label>
+                      </div>
+
+                      <div className="space-y-3">
+                        {bodyParams.map((param, index) => (
+                          <div key={index}>
+                            <label className="block text-xs text-gray-500 mb-1">
+                              Variable {personalizeWithUserData ? index + 2 : index + 1}
+                            </label>
+                            <input
+                              type="text"
+                              value={param}
+                              onChange={e => {
+                                const newParams = [...bodyParams];
+                                newParams[index] = e.target.value;
+                                setBodyParams(newParams);
+                              }}
+                              placeholder={`Enter value for variable ${personalizeWithUserData ? index + 2 : index + 1}`}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {dynamicButtons.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Button Variables
+                        </label>
+                        <span className="text-xs text-gray-500">
+                          {dynamicButtons.length} dynamic button{dynamicButtons.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {dynamicButtons.map((button) => {
+                          const key = toButtonInputKey(button);
+                          const values = buttonParamInputs[key] || [];
+                          return (
+                            <div key={`button-input-${key}`} className="p-3 rounded-lg border border-indigo-100 bg-indigo-50/40">
+                              <div className="text-xs font-medium text-indigo-800 mb-2">
+                                {button.text || `Button ${button.index + 1}`} ({button.type}){button.url ? ` - ${button.url}` : ""}
+                              </div>
+                              <div className="space-y-2">
+                                {Array.from({ length: button.paramCount }).map((_, paramIndex) => (
+                                  <input
+                                    key={`${key}-${paramIndex}`}
+                                    type="text"
+                                    value={values[paramIndex] || ""}
+                                    onChange={(e) => {
+                                      const next = [...values];
+                                      next[paramIndex] = e.target.value;
+                                      setButtonParamInputs((prev) => ({
+                                        ...prev,
+                                        [key]: next
+                                      }));
+                                    }}
+                                    placeholder={`Enter value for button variable ${paramIndex + 1}`}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-3">
+                    {sendResult && (
+                      <AppAlert
+                        tone={
+                          sendResult.status === "success"
+                            ? "success"
+                            : sendResult.status === "partial_success"
+                              ? "warn"
+                              : "error"
+                        }
+                        title={
+                          sendResult.status === "success"
+                            ? "Message Sent"
+                            : sendResult.status === "partial_success"
+                              ? "Partial Success"
+                              : "Send Failed"
+                        }
+                        toastKey={`${sendResult.status}:${sendResult.message}`}
+                        onClose={() => setSendResult(null)}
+                      >
+                        {sendResult.message}
+                      </AppAlert>
+                    )}
+                    <AppButton
+                      onClick={handleSend}
+                      disabled={!canSend}
+                      variant="primary"
+                    >
+                      {sending ? (
+                        <span className="flex items-center">
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Sending...
+                        </span>
+                      ) : 'Send Message'}
+                    </AppButton>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-        )}
         </div>
-          </div>
-        </div>
-
+      )}
     </PageLayout>
   );
 }
 
 export default Templates;
+
+
 
