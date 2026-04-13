@@ -126,8 +126,8 @@ function ExistingList() {
   const deletableCount = filteredDetails.reduce((acc, u, i) => acc + (selectedUsers.has(getUserKey(u, i)) && u.id != null ? 1 : 0), 0);
   const selectedCount = filteredDetails.reduce((acc, u, i) => acc + (selectedUsers.has(getUserKey(u, i)) ? 1 : 0), 0);
 
-  const handleContinue = () => {
-    const selected = filteredDetails
+  const getSelectedUsersPayload = () => {
+    return filteredDetails
       .map((u, i) => ({ u, i }))
       .filter(({ u, i }) => selectedUsers.has(getUserKey(u, i)))
       .map(({ u }) => ({
@@ -137,6 +137,10 @@ function ExistingList() {
         phoneNo: u.phoneNo,
         companyName: u.companyName,
       }));
+  };
+
+  const handleContinue = () => {
+    const selected = getSelectedUsersPayload();
     navigate('/templates', { state: { selected } });
   };
 
@@ -462,7 +466,7 @@ function ExistingList() {
                       selectedCount === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-700 hover:bg-blue-800'
                     }`}
                   >
-                    Continue{selectedCount > 0 ? ` (${selectedCount})` : ''}
+                    Send Template Message{selectedCount > 0 ? ` (${selectedCount})` : ''}
                   </button>
                 </div>
               )}

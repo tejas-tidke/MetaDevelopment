@@ -3,6 +3,7 @@ package com.htc.backend.controller;
 import com.htc.backend.dto.SendTemplateRequest;
 import com.htc.backend.entity.UserDetails;
 import com.htc.backend.repository.UserDetailsRepository;
+import com.htc.backend.whatsapp.service.engine.FlowTokenReferenceService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -32,13 +33,22 @@ public class WabaMessagesController {
     @Value("${waba.id:}")
     private String businessAccountId;
 
+    @Value("${waba.api-version:v19.0}")
+    private String apiVersion;
+
     private final RestTemplate restTemplate;
     private final UserDetailsRepository userDetailsRepository;
+    private final FlowTokenReferenceService flowTokenReferenceService;
 
     // Constructor injection for both RestTemplate and UserDetailsRepository
-    public WabaMessagesController(UserDetailsRepository userDetailsRepository, RestTemplate restTemplate) {
+    public WabaMessagesController(
+        UserDetailsRepository userDetailsRepository,
+        RestTemplate restTemplate,
+        FlowTokenReferenceService flowTokenReferenceService
+    ) {
         this.restTemplate = restTemplate;
         this.userDetailsRepository = userDetailsRepository;
+        this.flowTokenReferenceService = flowTokenReferenceService;
     }
 
     @PostMapping("/send-template")
@@ -94,7 +104,7 @@ public class WabaMessagesController {
             return processLargeBatchInChunks(req, recipients);
         }
 
-        String url = String.format("https://graph.facebook.com/v19.0/%s/messages", phoneNumberId);
+        String url = String.format("https://graph.facebook.com/%s/%s/messages", apiVersion, phoneNumberId);
         System.out.println("WhatsApp API URL: " + url); // Log the URL for debugging
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
@@ -108,6 +118,7 @@ public class WabaMessagesController {
 
         int sent = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
+        List<FlowButtonTokenRef> flowButtonTokenRefs = extractFlowButtonTokenRefs(req.buttonParameters);
         
         // For large batches, log progress at regular intervals
         int progressInterval = Math.max(10, recipients.size() / 10); // Log every 10% or every 10 recipients
@@ -417,6 +428,7 @@ public class WabaMessagesController {
                 if (response.getStatusCode().is2xxSuccessful()) {
                     sent++;
                     System.out.println("Message sent successfully to " + to);
+                    registerFlowButtonTokensForRecipient(to, req, flowButtonTokenRefs, response.getBody());
                     
                     // Log success response details
                     if (response.getBody() != null) {
@@ -543,7 +555,7 @@ public class WabaMessagesController {
         Map<String, Object> response = new HashMap<>();
         try {
             // Test if we can access the phone number
-            String url = String.format("https://graph.facebook.com/v19.0/%s", phoneNumberId);
+            String url = String.format("https://graph.facebook.com/%s/%s", apiVersion, phoneNumberId);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -808,8 +820,8 @@ public class WabaMessagesController {
     public Map<String, Object> debugTemplate(@PathVariable String templateName) {
         Map<String, Object> response = new HashMap<>();
         try {
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?name=%s", 
-                businessAccountId, templateName);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?name=%s", 
+                apiVersion, businessAccountId, templateName);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -838,8 +850,8 @@ public class WabaMessagesController {
     public Map<String, Object> checkTemplateStatus(@PathVariable String templateName) {
         Map<String, Object> response = new HashMap<>();
         try {
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?name=%s", 
-                businessAccountId, templateName);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?name=%s", 
+                apiVersion, businessAccountId, templateName);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -923,8 +935,8 @@ public class WabaMessagesController {
     public Map<String, Object> getExactTemplate(@PathVariable String templateName) {
         Map<String, Object> response = new HashMap<>();
         try {
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?name=%s", 
-                businessAccountId, templateName);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?name=%s", 
+                apiVersion, businessAccountId, templateName);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -983,7 +995,7 @@ public class WabaMessagesController {
     public Map<String, Object> listAllTemplates() {
         Map<String, Object> response = new HashMap<>();
         try {
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?limit=100", businessAccountId);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?limit=100", apiVersion, businessAccountId);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -1056,8 +1068,8 @@ public class WabaMessagesController {
     // Helper method to verify if template exists (optional)
     private boolean verifyTemplateExists(String templateName, String language) {
         try {
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?name=%s", 
-                businessAccountId, templateName);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?name=%s", 
+                apiVersion, businessAccountId, templateName);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
@@ -1167,6 +1179,117 @@ public class WabaMessagesController {
 
             components.add(buttonComponent);
         }
+    }
+
+    private List<FlowButtonTokenRef> extractFlowButtonTokenRefs(List<Map<String, Object>> buttonParameters) {
+        List<FlowButtonTokenRef> refs = new ArrayList<>();
+        if (buttonParameters == null || buttonParameters.isEmpty()) {
+            return refs;
+        }
+
+        for (Map<String, Object> buttonInput : buttonParameters) {
+            if (buttonInput == null || buttonInput.isEmpty()) {
+                continue;
+            }
+
+            String subType = buttonInput.get("subType") != null
+                ? String.valueOf(buttonInput.get("subType")).trim().toLowerCase(Locale.ROOT)
+                : "";
+            if (!"flow".equals(subType)) {
+                continue;
+            }
+
+            String index = buttonInput.get("index") != null ? String.valueOf(buttonInput.get("index")).trim() : "";
+            String flowId = buttonInput.get("flowId") != null ? String.valueOf(buttonInput.get("flowId")).trim() : null;
+            String flowName = buttonInput.get("flowName") != null ? String.valueOf(buttonInput.get("flowName")).trim() : null;
+
+            String flowToken = null;
+            Object rawParams = buttonInput.get("parameters");
+            if (rawParams instanceof List<?> params) {
+                for (Object paramObj : params) {
+                    if (!(paramObj instanceof Map<?, ?>)) {
+                        continue;
+                    }
+
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> param = (Map<String, Object>) paramObj;
+                    String paramType = param.get("type") != null
+                        ? String.valueOf(param.get("type")).trim().toLowerCase(Locale.ROOT)
+                        : "";
+                    if ("action".equals(paramType)) {
+                        Object actionObj = param.get("action");
+                        if (actionObj instanceof Map<?, ?> actionMap) {
+                            Object tokenObj = actionMap.get("flow_token");
+                            if (tokenObj != null && !String.valueOf(tokenObj).isBlank()) {
+                                flowToken = String.valueOf(tokenObj).trim();
+                                break;
+                            }
+                        }
+                    }
+
+                    Object directToken = param.get("flow_token");
+                    if (directToken != null && !String.valueOf(directToken).isBlank()) {
+                        flowToken = String.valueOf(directToken).trim();
+                        break;
+                    }
+                }
+            }
+
+            if (flowToken != null && !flowToken.isBlank()) {
+                refs.add(new FlowButtonTokenRef(flowToken, flowId, flowName, index));
+            }
+        }
+        return refs;
+    }
+
+    private void registerFlowButtonTokensForRecipient(
+        String recipient,
+        SendTemplateRequest req,
+        List<FlowButtonTokenRef> tokenRefs,
+        Map<String, Object> responseBody
+    ) {
+        if (tokenRefs == null || tokenRefs.isEmpty()) {
+            return;
+        }
+
+        String messageId = extractMessageId(responseBody);
+        for (FlowButtonTokenRef tokenRef : tokenRefs) {
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("templateName", req.templateName);
+            metadata.put("language", req.language);
+            metadata.put("buttonIndex", tokenRef.buttonIndex());
+            metadata.put("source", "template_flow_button");
+
+            flowTokenReferenceService.registerToken(
+                tokenRef.flowToken(),
+                tokenRef.flowId(),
+                tokenRef.flowName(),
+                recipient,
+                "template_flow_button",
+                messageId,
+                metadata
+            );
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractMessageId(Map<String, Object> responseBody) {
+        if (responseBody == null) {
+            return null;
+        }
+        Object messagesObj = responseBody.get("messages");
+        if (!(messagesObj instanceof List<?> messages) || messages.isEmpty()) {
+            return null;
+        }
+        Object first = messages.get(0);
+        if (!(first instanceof Map<?, ?>)) {
+            return null;
+        }
+        Object idObj = ((Map<String, Object>) first).get("id");
+        return idObj == null ? null : String.valueOf(idObj);
+    }
+
+    private record FlowButtonTokenRef(String flowToken, String flowId, String flowName, String buttonIndex) {
     }
 
     // Helper method to replace placeholders in all parameters using user details.
@@ -1396,8 +1519,9 @@ public class WabaMessagesController {
         Map<String, Object> result = new HashMap<>();
         int sent = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
+        List<FlowButtonTokenRef> flowButtonTokenRefs = extractFlowButtonTokenRefs(req.buttonParameters);
         
-        String url = String.format("https://graph.facebook.com/v19.0/%s/messages", phoneNumberId);
+        String url = String.format("https://graph.facebook.com/%s/%s/messages", apiVersion, phoneNumberId);
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -1532,6 +1656,7 @@ public class WabaMessagesController {
                 if (response.getStatusCode().is2xxSuccessful()) {
                     sent++;
                     System.out.println("Message sent successfully to " + to);
+                    registerFlowButtonTokensForRecipient(to, req, flowButtonTokenRefs, response.getBody());
                 } else {
                     Map<String, Object> error = new HashMap<>();
                     String errorMsg = "Status: " + response.getStatusCode().value();
@@ -1570,7 +1695,7 @@ public class WabaMessagesController {
 
         try {
             String encodedTemplateName = URLEncoder.encode(templateName, StandardCharsets.UTF_8);
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?name=%s", businessAccountId, encodedTemplateName);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?name=%s", apiVersion, businessAccountId, encodedTemplateName);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);

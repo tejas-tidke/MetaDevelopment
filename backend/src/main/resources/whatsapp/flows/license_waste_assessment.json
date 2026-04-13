@@ -1,0 +1,435 @@
+{
+  "id": "license_waste_assessment",
+  "name": "License Waste Assessment",
+  "description": "Interactive assessment to identify software license waste and optimization opportunities.",
+  "version": 1,
+  "entryStepId": "welcome",
+  "triggers": [
+    "start assessment",
+    "license waste assessment",
+    "license_waste_assessment",
+    "start license assessment"
+  ],
+  "restartKeywords": [
+    "restart",
+    "start over",
+    "reset"
+  ],
+  "fallbackMessage": "I can help with the License Waste Assessment. Reply with Start Assessment to begin.",
+  "unknownInputMessage": "Please choose one of the options shown so I can continue the assessment.",
+  "steps": [
+    {
+      "id": "welcome",
+      "type": "buttons",
+      "message": "Welcome to the License Waste Self-Assessment. What would you like to do?",
+      "footer": "Holograph Technologies",
+      "options": [
+        {
+          "id": "start_assessment",
+          "title": "Start",
+          "description": "Begin now",
+          "nextStepId": "select_category"
+        },
+        {
+          "id": "learn_more",
+          "title": "Learn More",
+          "description": "How this works",
+          "nextStepId": "learn_more"
+        },
+        {
+          "id": "talk_expert",
+          "title": "Talk Expert",
+          "description": "Connect with a specialist",
+          "nextStepId": "talk_to_expert"
+        }
+      ]
+    },
+    {
+      "id": "learn_more",
+      "type": "text",
+      "message": "This assessment estimates possible license waste using your company profile, license tracking process, and annual spend. It usually takes about 3-5 minutes.",
+      "next": {
+        "defaultStepId": "welcome"
+      }
+    },
+    {
+      "id": "talk_to_expert",
+      "type": "text",
+      "message": "A licensing specialist can help you with a full review. Continue here and we can capture your contact details.",
+      "next": {
+        "defaultStepId": "capture_email_prompt"
+      }
+    },
+    {
+      "id": "select_category",
+      "type": "list",
+      "buttonText": "Choose Category",
+      "message": "Select a category to assess first.",
+      "options": [
+        {
+          "id": "category_company_profile",
+          "title": "Company Profile",
+          "description": "Employee and vendor footprint",
+          "nextStepId": "employee_count"
+        },
+        {
+          "id": "category_license_management",
+          "title": "License Management",
+          "description": "Inventory and tracking maturity",
+          "nextStepId": "inventory_recency"
+        },
+        {
+          "id": "category_cost_estimate",
+          "title": "Cost Estimate",
+          "description": "Optimization tier and spend",
+          "nextStepId": "optimization_tier"
+        }
+      ]
+    },
+    {
+      "id": "employee_count",
+      "type": "list",
+      "answerKey": "employee_count",
+      "buttonText": "Select Range",
+      "message": "What is your employee count?",
+      "options": [
+        {
+          "id": "emp_lt_50",
+          "title": "Under 50",
+          "value": "40",
+          "score": 4,
+          "nextStepId": "vendor_count"
+        },
+        {
+          "id": "emp_50_200",
+          "title": "50 to 200",
+          "value": "150",
+          "score": 8,
+          "nextStepId": "vendor_count"
+        },
+        {
+          "id": "emp_201_1000",
+          "title": "201 to 1000",
+          "value": "600",
+          "score": 14,
+          "nextStepId": "vendor_count"
+        },
+        {
+          "id": "emp_gt_1000",
+          "title": "1000 plus",
+          "value": "1500",
+          "score": 18,
+          "nextStepId": "vendor_count"
+        }
+      ]
+    },
+    {
+      "id": "vendor_count",
+      "type": "list",
+      "answerKey": "vendor_count",
+      "buttonText": "Select Count",
+      "message": "How many software vendors do you manage?",
+      "options": [
+        {
+          "id": "vendor_1_3",
+          "title": "1 to 3 vendors",
+          "value": "3",
+          "score": 4,
+          "nextStepId": "vendor_portfolio"
+        },
+        {
+          "id": "vendor_4_8",
+          "title": "4 to 8 vendors",
+          "value": "8",
+          "score": 9,
+          "nextStepId": "vendor_portfolio"
+        },
+        {
+          "id": "vendor_9_15",
+          "title": "9 to 15 vendors",
+          "value": "15",
+          "score": 14,
+          "nextStepId": "vendor_portfolio"
+        },
+        {
+          "id": "vendor_gt_15",
+          "title": "More than 15",
+          "value": "16",
+          "score": 18,
+          "nextStepId": "vendor_portfolio"
+        }
+      ]
+    },
+    {
+      "id": "vendor_portfolio",
+      "type": "buttons",
+      "answerKey": "vendor_portfolio",
+      "message": "How complex is your vendor portfolio?",
+      "options": [
+        {
+          "id": "portfolio_standardized",
+          "title": "Standardized",
+          "value": "standardized",
+          "score": 4,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "portfolio_mixed",
+          "title": "Mixed",
+          "value": "mixed",
+          "score": 10,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "portfolio_complex",
+          "title": "Complex",
+          "value": "complex",
+          "score": 16,
+          "nextStepId": "assess_another_category"
+        }
+      ]
+    },
+    {
+      "id": "inventory_recency",
+      "type": "list",
+      "answerKey": "last_inventory_date",
+      "buttonText": "Select Option",
+      "message": "When was your last complete license inventory?",
+      "options": [
+        {
+          "id": "inventory_lt_6m",
+          "title": "Within 6 months",
+          "value": "within_6_months",
+          "score": 2,
+          "nextStepId": "tracking_method"
+        },
+        {
+          "id": "inventory_6_12m",
+          "title": "6 to 12 months ago",
+          "value": "six_to_twelve_months",
+          "score": 8,
+          "nextStepId": "tracking_method"
+        },
+        {
+          "id": "inventory_1_2y",
+          "title": "1 to 2 years ago",
+          "value": "one_to_two_years",
+          "score": 14,
+          "nextStepId": "tracking_method"
+        },
+        {
+          "id": "inventory_never",
+          "title": "Never or unsure",
+          "value": "never",
+          "score": 20,
+          "nextStepId": "tracking_method"
+        }
+      ]
+    },
+    {
+      "id": "tracking_method",
+      "type": "buttons",
+      "answerKey": "tracking_method",
+      "message": "How do you currently track software licenses?",
+      "options": [
+        {
+          "id": "track_itam",
+          "title": "ITAM Tool",
+          "value": "itam_tool",
+          "score": 3,
+          "nextStepId": "audit_history"
+        },
+        {
+          "id": "track_spreadsheet",
+          "title": "Spreadsheet",
+          "value": "spreadsheet",
+          "score": 11,
+          "nextStepId": "audit_history"
+        },
+        {
+          "id": "track_manual",
+          "title": "Manual",
+          "value": "manual",
+          "score": 17,
+          "nextStepId": "audit_history"
+        }
+      ]
+    },
+    {
+      "id": "audit_history",
+      "type": "buttons",
+      "answerKey": "audit_history",
+      "message": "In the last 24 months, did you face a vendor audit gap or penalty risk?",
+      "options": [
+        {
+          "id": "audit_no",
+          "title": "No",
+          "value": "no",
+          "score": 3,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "audit_minor",
+          "title": "Minor Gap",
+          "value": "minor",
+          "score": 10,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "audit_major",
+          "title": "Major Gap",
+          "value": "major",
+          "score": 18,
+          "nextStepId": "assess_another_category"
+        }
+      ]
+    },
+    {
+      "id": "optimization_tier",
+      "type": "buttons",
+      "answerKey": "optimization_tier",
+      "message": "Which best describes your license optimization maturity?",
+      "options": [
+        {
+          "id": "tier_proactive",
+          "title": "Proactive",
+          "value": "proactive",
+          "score": 3,
+          "nextStepId": "annual_spend"
+        },
+        {
+          "id": "tier_reactive",
+          "title": "Reactive",
+          "value": "reactive",
+          "score": 11,
+          "nextStepId": "annual_spend"
+        },
+        {
+          "id": "tier_none",
+          "title": "No Program",
+          "value": "none",
+          "score": 19,
+          "nextStepId": "annual_spend"
+        }
+      ]
+    },
+    {
+      "id": "annual_spend",
+      "type": "list",
+      "answerKey": "annual_spend",
+      "buttonText": "Select Spend",
+      "message": "Approximate annual software license spend?",
+      "options": [
+        {
+          "id": "spend_lt_50k",
+          "title": "Under 50k",
+          "value": "50000",
+          "score": 4,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "spend_50k_200k",
+          "title": "50k to 200k",
+          "value": "150000",
+          "score": 8,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "spend_200k_500k",
+          "title": "200k to 500k",
+          "value": "350000",
+          "score": 12,
+          "nextStepId": "assess_another_category"
+        },
+        {
+          "id": "spend_gt_500k",
+          "title": "Over 500k",
+          "value": "750000",
+          "score": 18,
+          "nextStepId": "assess_another_category"
+        }
+      ]
+    },
+    {
+      "id": "assess_another_category",
+      "type": "buttons",
+      "message": "Would you like to assess another category before viewing your result?",
+      "options": [
+        {
+          "id": "assess_another_yes",
+          "title": "Yes",
+          "value": "yes",
+          "nextStepId": "select_category"
+        },
+        {
+          "id": "assess_another_no",
+          "title": "Show Result",
+          "value": "no",
+          "nextStepId": "calculate_result"
+        }
+      ]
+    },
+    {
+      "id": "calculate_result",
+      "type": "action",
+      "actionHandler": "license_waste_assessment_score",
+      "next": {
+        "defaultStepId": "result_summary"
+      }
+    },
+    {
+      "id": "result_summary",
+      "type": "text",
+      "message": "Assessment complete. Risk level: {{assessment_risk_level}}. Total score: {{assessment_total_score}}. Estimated license waste: {{assessment_estimated_waste_amount}} per year.",
+      "next": {
+        "defaultStepId": "capture_email_prompt"
+      }
+    },
+    {
+      "id": "capture_email_prompt",
+      "type": "buttons",
+      "message": "Would you like a detailed report and expert recommendations by email?",
+      "options": [
+        {
+          "id": "capture_email_yes",
+          "title": "Yes",
+          "value": "yes",
+          "nextStepId": "capture_email_input"
+        },
+        {
+          "id": "capture_email_no",
+          "title": "No",
+          "value": "no",
+          "nextStepId": "persist_result"
+        }
+      ]
+    },
+    {
+      "id": "capture_email_input",
+      "type": "input",
+      "answerKey": "work_email",
+      "message": "Please share your work email address.",
+      "validation": {
+        "required": true,
+        "type": "email",
+        "errorMessage": "Please enter a valid work email (example: name@company.com)."
+      },
+      "next": {
+        "defaultStepId": "persist_result"
+      }
+    },
+    {
+      "id": "persist_result",
+      "type": "action",
+      "actionHandler": "persist_assessment_result",
+      "next": {
+        "defaultStepId": "end_assessment"
+      }
+    },
+    {
+      "id": "end_assessment",
+      "type": "end",
+      "message": "Thanks for completing the License Waste Assessment. Reply restart anytime to run it again."
+    }
+  ]
+}

@@ -137,6 +137,18 @@ function Welcome() {
                   </svg>
                   View Existing Data
                 </AppButton>
+
+                <AppButton
+                  onClick={() => navigate('/conversations')}
+                  variant="secondary"
+                  size="lg"
+                  fullWidth
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h8M8 14h5m7-8H4a2 2 0 00-2 2v8a2 2 0 002 2h4l4 3v-3h8a2 2 0 002-2V8a2 2 0 00-2-2z" />
+                  </svg>
+                  Conversation Monitor
+                </AppButton>
                 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">

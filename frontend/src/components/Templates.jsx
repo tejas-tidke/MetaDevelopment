@@ -40,6 +40,8 @@ function Templates() {
   const [bodyParams, setBodyParams] = useState([]);
   // Dynamic button variables keyed by button index -> array of values
   const [buttonParamInputs, setButtonParamInputs] = useState({});
+  // Flow button tracking tokens keyed by button index
+  const [flowButtonTokens, setFlowButtonTokens] = useState({});
 
   const normalizeUsers = (users) =>
     (users || []).map((user, index) => ({
@@ -138,6 +140,7 @@ function Templates() {
 
     const templateButtons = getTemplateButtons(selectedTemplate);
     const initialButtonInputs = {};
+    const initialFlowTokens = {};
     templateButtons.forEach((button) => {
       if ((button.paramCount || 0) > 0) {
         initialButtonInputs[toButtonInputKey(button)] = Array.from(
@@ -145,8 +148,12 @@ function Templates() {
           () => ""
         );
       }
+      if (button.type === "FLOW") {
+        initialFlowTokens[toButtonInputKey(button)] = generateFlowToken();
+      }
     });
     setButtonParamInputs(initialButtonInputs);
+    setFlowButtonTokens(initialFlowTokens);
   }, [selectedTemplate, personalizeWithUserData]);
 
   const handleFileUpload = (e) => {
@@ -194,6 +201,7 @@ function Templates() {
   const headerParamCount = Number(selectedTemplate?.headerParamCount || 0);
   const templateButtons = getTemplateButtons(selectedTemplate);
   const dynamicButtons = templateButtons.filter((button) => (button.paramCount || 0) > 0);
+  const flowButtons = templateButtons.filter((button) => button.type === "FLOW");
   const hasDynamicTextHeader = headerFormat === "TEXT" && headerParamCount > 0;
   const hasMediaHeader = ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat);
   const requiresHeaderInput = hasDynamicTextHeader || hasMediaHeader;
@@ -215,7 +223,11 @@ function Templates() {
     const values = buttonParamInputs[key] || [];
     return values.length === button.paramCount && values.every((value) => (value || "").trim().length > 0);
   });
-  const canSend = !!selectedTemplate && recipients.length > 0 && headerOk && bodyOk && buttonsOk && !sending;
+  const flowButtonsOk = flowButtons.every((button) => {
+    const key = toButtonInputKey(button);
+    return (flowButtonTokens[key] || "").trim().length > 0;
+  });
+  const canSend = !!selectedTemplate && recipients.length > 0 && headerOk && bodyOk && buttonsOk && flowButtonsOk && !sending;
 
   const resolveUrlTemplate = (urlTemplate, values = []) => {
     if (!urlTemplate) return "";
@@ -435,7 +447,7 @@ function Templates() {
       return { type: "text", text: value };
     };
 
-    const buttonParameters = dynamicButtons
+    const dynamicButtonParameters = dynamicButtons
       .map((button) => {
         const key = toButtonInputKey(button);
         const values = (buttonParamInputs[key] || []).map((v) => (v || "").trim()).filter(Boolean);
@@ -448,6 +460,28 @@ function Templates() {
         };
       })
       .filter(Boolean);
+
+    // Flow buttons in template messages require a button component payload.
+    const flowButtonParameters = flowButtons.map((button) => {
+      const key = toButtonInputKey(button);
+      const token = (flowButtonTokens[key] || generateFlowToken()).trim();
+      return {
+      index: String(button.index),
+      subType: "flow",
+      flowId: button.flowId || "",
+      flowName: button.flowName || "",
+      parameters: [
+        {
+          type: "action",
+          action: {
+            flow_token: token
+          }
+        }
+      ]
+    };
+    });
+
+    const buttonParameters = [...dynamicButtonParameters, ...flowButtonParameters];
 
     // Only add parameters if we have any
     if (parameters.length > 0) {
@@ -961,6 +995,78 @@ function Templates() {
                     </div>
                   )}
 
+                  {flowButtons.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Flow Button Settings
+                        </label>
+                        <span className="text-xs text-gray-500">
+                          {flowButtons.length} flow button{flowButtons.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <div className="space-y-4">
+                        {flowButtons.map((button) => {
+                          const key = toButtonInputKey(button);
+                          const tokenValue = flowButtonTokens[key] || "";
+                          return (
+                            <div key={`flow-button-${key}`} className="p-3 rounded-lg border border-cyan-100 bg-cyan-50/40 space-y-2">
+                              <div className="text-xs font-medium text-cyan-900">
+                                {button.text || `Button ${button.index + 1}`} (FLOW)
+                              </div>
+                              <div className="text-[11px] text-cyan-800">
+                                Flow: {button.flowName || "-"} {button.flowId ? `(${button.flowId})` : ""}
+                              </div>
+                              {button.flowAction && (
+                                <div className="text-[11px] text-cyan-800">
+                                  Action: {button.flowAction}
+                                  {button.navigateScreen ? ` | Start Screen: ${button.navigateScreen}` : ""}
+                                </div>
+                              )}
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">
+                                  Flow Token (tracking id)
+                                </label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={tokenValue}
+                                    onChange={(e) =>
+                                      setFlowButtonTokens((prev) => ({
+                                        ...prev,
+                                        [key]: e.target.value
+                                      }))
+                                    }
+                                    placeholder="flow_12345"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-sm"
+                                  />
+                                  <AppButton
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() =>
+                                      setFlowButtonTokens((prev) => ({
+                                        ...prev,
+                                        [key]: generateFlowToken()
+                                      }))
+                                    }
+                                  >
+                                    Regenerate
+                                  </AppButton>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {flowButtons.length === 0 && (
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                      This template does not contain a Flow button. Choose an approved template with a Flow button to launch a published flow.
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-end gap-3">
                     {sendResult && (
                       <AppAlert
@@ -1011,6 +1117,10 @@ function Templates() {
 }
 
 export default Templates;
+
+function generateFlowToken() {
+  return `flow_${Date.now().toString().slice(-10)}`;
+}
 
 
 

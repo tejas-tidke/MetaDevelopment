@@ -24,6 +24,9 @@ public class WabaTemplatesController {
     @Value("${waba.phone-number-id:}")
     private String phoneNumberId;
 
+    @Value("${waba.api-version:v19.0}")
+    private String apiVersion;
+
     private final RestTemplate restTemplate;
 
     // Constructor injection for RestTemplate
@@ -44,7 +47,7 @@ public class WabaTemplatesController {
                 return response;
             }
 
-            String url = String.format("https://graph.facebook.com/v19.0/%s/message_templates?limit=200", businessAccountId);
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates?limit=200", apiVersion, businessAccountId);
             HttpHeaders headers = new HttpHeaders();
             headers.setBearerAuth(accessToken);
             HttpEntity<Void> entity = new HttpEntity<>(headers);

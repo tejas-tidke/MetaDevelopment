@@ -1,9 +1,10 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import Login from './components/Login';
 import Signup from './components/Signup';
 import Welcome from './components/Welcome';
 import Templates from './components/Templates';
+import Conversations from './components/Conversations';
 import ExistingList from './components/ExistingList';
 import FileUpload from './components/FileUpload';
 import UserProfile from './components/UserProfile';
@@ -43,6 +44,22 @@ function AppRoutes() {
             element={
               <ProtectedRoute>
                 <Templates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/flows"
+            element={
+              <ProtectedRoute>
+                <Navigate to="/templates" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conversations"
+            element={
+              <ProtectedRoute>
+                <Conversations />
               </ProtectedRoute>
             }
           />
