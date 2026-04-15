@@ -1,22 +1,46 @@
 :root {
-  --auth-bg-top: #f7f9ff;
-  --auth-bg-bottom: #edf4ff;
+  --auth-bg-top: var(--brand-page-bg);
+  --auth-bg-bottom: var(--brand-soft-bg);
   --auth-surface: rgba(255, 255, 255, 0.85);
-  --auth-surface-solid: #ffffff;
-  --auth-ink-strong: #0f172a;
-  --auth-ink: #1f2a44;
-  --auth-ink-soft: #4f5d75;
-  --auth-line: #d5e1f2;
-  --auth-primary: #2563eb;
-  --auth-primary-strong: #1d4ed8;
-  --auth-accent: #4338ca;
-  --auth-accent-soft: #c7d2fe;
-  --auth-success-bg: #ebfbf4;
-  --auth-success-text: #04613f;
-  --auth-error-bg: #fff1ed;
-  --auth-error-text: #9c2a1e;
+  --auth-surface-solid: var(--brand-card-bg);
+  --auth-ink-strong: var(--brand-text);
+  --auth-ink: var(--brand-secondary);
+  --auth-ink-soft: var(--brand-muted-text);
+  --auth-line: var(--brand-border);
+  --auth-primary: var(--brand-primary);
+  --auth-primary-strong: var(--brand-primary-hover);
+  --auth-accent: var(--brand-accent);
+  --auth-accent-soft: var(--brand-soft-bg);
+  --auth-success-bg: rgba(22, 163, 74, 0.1);
+  --auth-success-text: var(--brand-success);
+  --auth-error-bg: rgba(220, 38, 38, 0.1);
+  --auth-error-text: var(--brand-error);
+  --auth-showcase-gradient: var(--brand-gradient-hero);
   --auth-shadow-lg: 0 26px 70px rgba(15, 23, 42, 0.2);
   --auth-shadow-md: 0 18px 35px rgba(15, 23, 42, 0.12);
+}
+
+:root[data-theme="dark"],
+.theme-dark {
+  --auth-bg-top: var(--brand-page-bg);
+  --auth-bg-bottom: var(--brand-soft-bg);
+  --auth-surface: rgba(17, 24, 46, 0.88);
+  --auth-surface-solid: var(--brand-card-bg);
+  --auth-ink-strong: var(--brand-text);
+  --auth-ink: var(--brand-text);
+  --auth-ink-soft: var(--brand-muted-text);
+  --auth-line: var(--brand-border);
+  --auth-primary: var(--brand-primary);
+  --auth-primary-strong: var(--brand-primary-hover);
+  --auth-accent: var(--brand-accent);
+  --auth-accent-soft: rgba(96, 165, 250, 0.15);
+  --auth-success-bg: rgba(34, 197, 94, 0.12);
+  --auth-success-text: var(--brand-success);
+  --auth-error-bg: rgba(248, 113, 113, 0.14);
+  --auth-error-text: var(--brand-error);
+  --auth-showcase-gradient: var(--brand-gradient-dark);
+  --auth-shadow-lg: 0 26px 70px rgba(2, 6, 23, 0.45);
+  --auth-shadow-md: 0 18px 35px rgba(2, 6, 23, 0.32);
 }
 
 .auth-page {
@@ -89,7 +113,7 @@
 }
 
 .auth-showcase {
-  background: linear-gradient(155deg, #1d4ed8, #4338ca 52%, #1e3a8a);
+  background: var(--auth-showcase-gradient);
   border-radius: 28px;
   padding: clamp(1.7rem, 2.7vw, 2.6rem);
   color: #f8fbff;

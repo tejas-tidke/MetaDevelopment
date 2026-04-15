@@ -85,7 +85,7 @@ function ToastAlert({
 
   const toneMap = {
     success: {
-      iconWrap: "text-emerald-700 bg-emerald-100",
+      iconWrap: "text-[var(--brand-success)] bg-[rgba(22,163,74,0.12)]",
       icon: (
         <path
           stroke="currentColor"
@@ -97,7 +97,7 @@ function ToastAlert({
       ),
     },
     error: {
-      iconWrap: "text-rose-700 bg-rose-100",
+      iconWrap: "text-[var(--brand-error)] bg-[rgba(220,38,38,0.12)]",
       icon: (
         <path
           stroke="currentColor"
@@ -109,7 +109,7 @@ function ToastAlert({
       ),
     },
     warning: {
-      iconWrap: "text-amber-700 bg-amber-100",
+      iconWrap: "text-[var(--brand-warning)] bg-[rgba(245,158,11,0.14)]",
       icon: (
         <path
           stroke="currentColor"
@@ -121,7 +121,7 @@ function ToastAlert({
       ),
     },
     info: {
-      iconWrap: "text-sky-700 bg-sky-100",
+      iconWrap: "text-[var(--brand-accent)] bg-[rgba(59,130,246,0.12)]",
       icon: (
         <path
           stroke="currentColor"
@@ -142,7 +142,7 @@ function ToastAlert({
     >
       <div
         id={id}
-        className={`flex items-start w-full p-4 text-slate-700 bg-white rounded-xl shadow-lg border border-slate-200 transition-all duration-200 ease-out pointer-events-auto ${
+        className={`flex items-start w-full p-4 text-[var(--brand-muted-text)] bg-[var(--brand-card-bg)] rounded-xl shadow-lg border border-[var(--brand-border)] transition-all duration-200 ease-out pointer-events-auto ${
           isOpen ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-2 scale-[0.98]"
         }`.trim()}
         role="alert"
@@ -157,15 +157,15 @@ function ToastAlert({
         </div>
 
         <div className="ms-3 text-sm">
-          {title ? <p className="font-semibold text-slate-900">{title}</p> : null}
-          <div className={title ? "mt-0.5 font-normal text-slate-700" : "font-normal text-slate-700"}>
+          {title ? <p className="font-semibold text-[var(--brand-text)]">{title}</p> : null}
+          <div className={title ? "mt-0.5 font-normal text-[var(--brand-muted-text)]" : "font-normal text-[var(--brand-muted-text)]"}>
             {children}
           </div>
         </div>
 
         <button
           type="button"
-          className="ms-auto flex items-center justify-center bg-transparent border border-transparent hover:bg-slate-100 focus:ring-4 focus:ring-slate-200 rounded text-sm h-8 w-8 focus:outline-none"
+          className="ms-auto flex items-center justify-center bg-transparent border border-transparent hover:bg-[var(--brand-soft-bg)] focus:ring-4 focus:ring-[rgba(31,94,255,0.2)] rounded text-sm h-8 w-8 focus:outline-none"
           aria-label="Close"
           onClick={handleClose}
         >

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,7 +39,7 @@ public class WabaTemplatesController {
     public Map<String, Object> getTemplates() {
         Map<String, Object> response = new HashMap<>();
         try {
-            if (businessAccountId == null || businessAccountId.isBlank() || accessToken == null || accessToken.isBlank() || phoneNumberId == null || phoneNumberId.isBlank()) {
+            if (isConfigMissing()) {
                 response.put("status", "error");
                 response.put("message", "WABA configuration missing. Please check your application.properties for:\n" +
                     "- waba.id (Business Account ID)\n" +
@@ -163,9 +164,77 @@ public class WabaTemplatesController {
         return response;
     }
 
+    @PostMapping("/templates")
+    public Map<String, Object> createTemplate(@RequestBody Map<String, Object> payload) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            if (isConfigMissing()) {
+                response.put("status", "error");
+                response.put("message", "WABA configuration missing. Please check your application.properties for:\n" +
+                    "- waba.id (Business Account ID)\n" +
+                    "- waba.phone-number-id\n" +
+                    "- waba.access-token");
+                return response;
+            }
+
+            String templateName = String.valueOf(payload.getOrDefault("name", "")).trim();
+            String language = String.valueOf(payload.getOrDefault("language", "")).trim();
+            String category = String.valueOf(payload.getOrDefault("category", "")).trim().toUpperCase(Locale.ROOT);
+            Object componentsObj = payload.get("components");
+
+            if (templateName.isEmpty() || language.isEmpty() || category.isEmpty() || !(componentsObj instanceof List<?>)) {
+                response.put("status", "error");
+                response.put("message", "Invalid payload. Required fields: name, language, category, components.");
+                return response;
+            }
+
+            Map<String, Object> createPayload = new LinkedHashMap<>();
+            createPayload.put("name", templateName);
+            createPayload.put("language", language);
+            createPayload.put("category", category);
+            createPayload.put("components", componentsObj);
+
+            Object allowCategoryChange = payload.get("allow_category_change");
+            if (allowCategoryChange instanceof Boolean) {
+                createPayload.put("allow_category_change", allowCategoryChange);
+            }
+
+            String url = String.format("https://graph.facebook.com/%s/%s/message_templates", apiVersion, businessAccountId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(createPayload, headers);
+
+            ResponseEntity<String> result = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> metaResponse = mapper.readValue(result.getBody(), Map.class);
+
+            response.put("status", "success");
+            response.put("data", metaResponse);
+            response.put("message", "Template submitted to Meta successfully.");
+            return response;
+        } catch (HttpStatusCodeException e) {
+            response.put("status", "error");
+            response.put("message", "Meta API error while creating template.");
+            response.put("metaStatusCode", e.getStatusCode().value());
+            response.put("metaError", e.getResponseBodyAsString());
+            return response;
+        } catch (Exception e) {
+            response.put("status", "error");
+            response.put("message", "Error creating template: " + e.getMessage());
+            return response;
+        }
+    }
+
     private String optText(JsonNode node, String field) {
         JsonNode n = node.get(field);
         return n != null && !n.isNull() ? n.asText() : "";
+    }
+
+    private boolean isConfigMissing() {
+        return businessAccountId == null || businessAccountId.isBlank()
+            || accessToken == null || accessToken.isBlank()
+            || phoneNumberId == null || phoneNumberId.isBlank();
     }
 
     private int countPlaceholders(String text) {

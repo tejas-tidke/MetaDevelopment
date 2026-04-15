@@ -4,6 +4,26 @@
 
 /* Minimal overrides - don't force global flex on body */
 :root {
+  color-scheme: light;
+
+  /* Light theme - Holograph-inspired brand system */
+  --brand-primary: #1f5eff;
+  --brand-primary-hover: #1749c6;
+  --brand-secondary: #0d1b4c;
+  --brand-accent: #3b82f6;
+  --brand-page-bg: #f8faff;
+  --brand-card-bg: #ffffff;
+  --brand-soft-bg: #eef4ff;
+  --brand-border: #d9e4ff;
+  --brand-text: #0f172a;
+  --brand-muted-text: #5b6475;
+  --brand-success: #16a34a;
+  --brand-warning: #f59e0b;
+  --brand-error: #dc2626;
+  --brand-gradient-hero: linear-gradient(135deg, #0d1b4c, #1f5eff);
+  --brand-gradient-cta: linear-gradient(135deg, #1f5eff, #60a5fa);
+  --brand-gradient-dark: linear-gradient(135deg, #0a1022, #18213c);
+
   --app-font-family: "Atlassian Sans", "Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --app-font-display: var(--app-font-family);
   font-family: var(--app-font-family);
@@ -11,11 +31,41 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark theme tokens (activate via <html data-theme="dark"> or .theme-dark wrapper) */
+:root[data-theme="dark"],
+.theme-dark {
+  color-scheme: dark;
+
+  --brand-primary: #4d7cff;
+  --brand-primary-hover: #6b92ff;
+  --brand-secondary: #9bb4ff;
+  --brand-accent: #60a5fa;
+  --brand-page-bg: #0a1022;
+  --brand-card-bg: #11182e;
+  --brand-soft-bg: #18213c;
+  --brand-border: #273252;
+  --brand-text: #f8fafc;
+  --brand-muted-text: #a7b1c7;
+  --brand-success: #22c55e;
+  --brand-warning: #fbbf24;
+  --brand-error: #f87171;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #f8fafc; /* light background */
-  color: #111827;
+  background-color: var(--brand-page-bg);
+  color: var(--brand-text);
   font-family: var(--app-font-family);
+}
+
+a {
+  color: var(--brand-accent);
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }

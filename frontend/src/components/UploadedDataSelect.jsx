@@ -122,7 +122,7 @@ function UploadedDataSelect() {
   };
 
   return (
-    <PageLayout className="h-screen overflow-hidden" shellClassName="h-full flex flex-col">
+    <PageLayout shellClassName="h-full flex flex-col overflow-hidden">
         <WorkspaceHeader
           title="Uploaded Data"
           subtitle="Review imported records from your latest file before moving to templates."

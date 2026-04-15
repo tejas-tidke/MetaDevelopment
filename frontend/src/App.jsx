@@ -4,6 +4,7 @@ import Login from './components/Login';
 import Signup from './components/Signup';
 import Welcome from './components/Welcome';
 import Templates from './components/Templates';
+import TemplateCreate from './components/TemplateCreate';
 import Conversations from './components/Conversations';
 import ExistingList from './components/ExistingList';
 import FileUpload from './components/FileUpload';
@@ -44,6 +45,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute>
                 <Templates />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/templates/new"
+            element={
+              <ProtectedRoute>
+                <TemplateCreate />
               </ProtectedRoute>
             }
           />

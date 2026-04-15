@@ -113,7 +113,7 @@ function Welcome() {
           }
         />
         
-        <div className="h-full flex flex-col items-center justify-center text-center">
+        <div className="min-h-0 flex-1 flex flex-col items-center justify-center text-center px-4 py-6">
           <div className="mb-10">
             <h1 className="text-2xl font-bold mb-3 text-gray-900">Welcome to the Dashboard!</h1>
             <p className="text-gray-600 max-w-md mx-auto">

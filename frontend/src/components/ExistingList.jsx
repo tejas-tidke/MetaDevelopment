@@ -231,7 +231,7 @@ function ExistingList() {
   };
 
   return (
-    <PageLayout className="h-screen overflow-hidden" shellClassName="h-full flex flex-col">
+    <PageLayout shellClassName="h-full flex flex-col overflow-hidden">
         <WorkspaceHeader
           title="Data Management"
           subtitle="View and manage all user records and file uploads in one place."
