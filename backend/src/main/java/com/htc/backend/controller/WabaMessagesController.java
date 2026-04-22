@@ -118,6 +118,7 @@ public class WabaMessagesController {
 
         int sent = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
+        List<Map<String, Object>> recipientResults = new ArrayList<>();
         List<FlowButtonTokenRef> flowButtonTokenRefs = extractFlowButtonTokenRefs(req.buttonParameters);
         
         // For large batches, log progress at regular intervals
@@ -161,6 +162,7 @@ public class WabaMessagesController {
                     error.put("to", to);
                     error.put("error", "Process interrupted: " + e.getMessage());
                     errors.add(error);
+                    recipientResults.add(buildRecipientResult(to, "failed", null, "Process interrupted: " + e.getMessage()));
                     break;
                 }
             }
@@ -429,6 +431,8 @@ public class WabaMessagesController {
                     sent++;
                     System.out.println("Message sent successfully to " + to);
                     registerFlowButtonTokensForRecipient(to, req, flowButtonTokenRefs, response.getBody());
+                    String waMessageId = extractMessageId(response.getBody());
+                    recipientResults.add(buildRecipientResult(to, "sent", waMessageId, null));
                     
                     // Log success response details
                     if (response.getBody() != null) {
@@ -467,6 +471,7 @@ public class WabaMessagesController {
                     error.put("to", to);
                     error.put("error", errorMsg);
                     errors.add(error);
+                    recipientResults.add(buildRecipientResult(to, "failed", null, errorMsg));
                     System.err.println("Error sending to " + to + ": " + errorMsg);
                 }
             } catch (HttpClientErrorException.Unauthorized e) {
@@ -475,6 +480,7 @@ public class WabaMessagesController {
                 error.put("error", "Authentication failed (401 Unauthorized). Please check your WhatsApp access token and phone number ID configuration.");
                 error.put("errorCode", "AUTH_FAILED");
                 errors.add(error);
+                recipientResults.add(buildRecipientResult(to, "failed", null, String.valueOf(error.get("error"))));
                 System.err.println("Authentication failed sending to " + to + ": " + e.getMessage());
                 System.err.println("Please verify your waba.access-token and waba.phone-number-id in application.properties");
             } catch (HttpClientErrorException e) {
@@ -484,6 +490,7 @@ public class WabaMessagesController {
                 error.put("errorCode", "HTTP_ERROR");
                 error.put("statusCode", e.getStatusCode().value());
                 errors.add(error);
+                recipientResults.add(buildRecipientResult(to, "failed", null, String.valueOf(error.get("error"))));
                 System.err.println("HTTP error sending to " + to + ": " + e.getMessage());
                 
                 // Log response body if available
@@ -496,6 +503,7 @@ public class WabaMessagesController {
                 error.put("error", "Error sending message: " + e.getMessage());
                 error.put("errorCode", "GENERAL_ERROR");
                 errors.add(error);
+                recipientResults.add(buildRecipientResult(to, "failed", null, String.valueOf(error.get("error"))));
                 System.err.println("Exception sending to " + to + ": " + e.getMessage());
                 e.printStackTrace(); // Print full stack trace for debugging
             }
@@ -535,6 +543,7 @@ public class WabaMessagesController {
                 result.put("errors", errors);
             }
         }
+        result.put("recipientResults", recipientResults);
         
         // Log final summary
         System.out.println("=== BATCH SEND SUMMARY ===");
@@ -1118,6 +1127,22 @@ public class WabaMessagesController {
         return normalized;
     }
 
+    private Map<String, Object> buildRecipientResult(
+        String recipient,
+        String status,
+        String waMessageId,
+        String errorMessage
+    ) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("to", recipient);
+        item.put("normalizedTo", normalizePhoneNumber(recipient));
+        item.put("status", status);
+        item.put("waMessageId", waMessageId);
+        item.put("error", errorMessage);
+        item.put("updatedAt", new Date().getTime());
+        return item;
+    }
+
     // Helper method to append button components for template sending.
     private void appendButtonComponents(List<Map<String, Object>> components, List<Map<String, Object>> buttonParameters) {
         if (buttonParameters == null || buttonParameters.isEmpty()) {
@@ -1421,6 +1446,7 @@ public class WabaMessagesController {
         int totalSent = 0;
         int totalFailed = 0;
         List<Map<String, Object>> allErrors = new ArrayList<>();
+        List<Map<String, Object>> allRecipientResults = new ArrayList<>();
         
         // Split into chunks of 100 recipients each (hardcoded instead of using BatchProcessingUtil)
         int chunkSize = 100;
@@ -1465,6 +1491,11 @@ public class WabaMessagesController {
             if (errorsObj instanceof List) {
                 allErrors.addAll((List<Map<String, Object>>) errorsObj);
             }
+
+            Object recipientResultsObj = chunkResult.get("recipientResults");
+            if (recipientResultsObj instanceof List) {
+                allRecipientResults.addAll((List<Map<String, Object>>) recipientResultsObj);
+            }
             
             // Add a delay between chunks to avoid rate limiting
             // Using minimum safe delay between chunks
@@ -1500,6 +1531,7 @@ public class WabaMessagesController {
                 finalResult.put("errors", allErrors);
             }
         }
+        finalResult.put("recipientResults", allRecipientResults);
         
         System.out.println("=== LARGE BATCH PROCESSING COMPLETE ===");
         System.out.println("Total recipients: " + allRecipients.size());
@@ -1519,6 +1551,7 @@ public class WabaMessagesController {
         Map<String, Object> result = new HashMap<>();
         int sent = 0;
         List<Map<String, Object>> errors = new ArrayList<>();
+        List<Map<String, Object>> recipientResults = new ArrayList<>();
         List<FlowButtonTokenRef> flowButtonTokenRefs = extractFlowButtonTokenRefs(req.buttonParameters);
         
         String url = String.format("https://graph.facebook.com/%s/%s/messages", apiVersion, phoneNumberId);
@@ -1559,6 +1592,7 @@ public class WabaMessagesController {
                     error.put("to", to);
                     error.put("error", "Process interrupted: " + e.getMessage());
                     errors.add(error);
+                    recipientResults.add(buildRecipientResult(to, "failed", null, "Process interrupted: " + e.getMessage()));
                     break;
                 }
             }
@@ -1657,6 +1691,8 @@ public class WabaMessagesController {
                     sent++;
                     System.out.println("Message sent successfully to " + to);
                     registerFlowButtonTokensForRecipient(to, req, flowButtonTokenRefs, response.getBody());
+                    String waMessageId = extractMessageId(response.getBody());
+                    recipientResults.add(buildRecipientResult(to, "sent", waMessageId, null));
                 } else {
                     Map<String, Object> error = new HashMap<>();
                     String errorMsg = "Status: " + response.getStatusCode().value();
@@ -1666,6 +1702,7 @@ public class WabaMessagesController {
                     error.put("to", to);
                     error.put("error", errorMsg);
                     errors.add(error);
+                    recipientResults.add(buildRecipientResult(to, "failed", null, errorMsg));
                     System.err.println("Error sending to " + to + ": " + errorMsg);
                 }
             } catch (Exception e) {
@@ -1673,6 +1710,7 @@ public class WabaMessagesController {
                 error.put("to", to);
                 error.put("error", "Error sending message: " + e.getMessage());
                 errors.add(error);
+                recipientResults.add(buildRecipientResult(to, "failed", null, String.valueOf(error.get("error"))));
                 System.err.println("Exception sending to " + to + ": " + e.getMessage());
             }
         }
@@ -1682,6 +1720,7 @@ public class WabaMessagesController {
         if (!errors.isEmpty()) {
             result.put("errors", errors);
         }
+        result.put("recipientResults", recipientResults);
         
         return result;
     }

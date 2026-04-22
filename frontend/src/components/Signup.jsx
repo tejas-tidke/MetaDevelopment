@@ -129,7 +129,7 @@ function Signup() {
       saveUserData(user);
 
       setMessage("Account created successfully!");
-      setTimeout(() => navigate("/welcome"), 1500);
+      setTimeout(() => navigate("/app/dashboard"), 1500);
     } catch (error) {
       console.error("Signup Error:", error);
       let errorMsg = "Signup failed. Please try again.";
@@ -175,7 +175,7 @@ function Signup() {
       saveUserData(user);
 
       setMessage("Authentication successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate("/app/dashboard"), 1000);
     } catch (error) {
       console.error("Google Authentication Error:", error);
 
@@ -186,7 +186,7 @@ function Signup() {
         errorMsg = "An account already exists with this email. Please sign in using your original authentication method.";
         setMessage(errorMsg);
         setTimeout(() => {
-          navigate("/login", { state: { message: errorMsg } });
+          navigate("/auth/login", { state: { message: errorMsg } });
         }, 2000);
         return;
       }
@@ -208,7 +208,7 @@ function Signup() {
       saveUserData(user);
 
       setMessage("Authentication successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate("/app/dashboard"), 1000);
     } catch (error) {
       console.error("Microsoft Authentication Error:", error);
 
@@ -219,7 +219,7 @@ function Signup() {
         errorMsg = "An account already exists with this email. Please sign in using your original authentication method.";
         setMessage(errorMsg);
         setTimeout(() => {
-          navigate("/login", { state: { message: errorMsg } });
+          navigate("/auth/login", { state: { message: errorMsg } });
         }, 2000);
         return;
       }
@@ -244,7 +244,7 @@ function Signup() {
       saveUserData(user);
 
       setMessage("Authentication successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate("/app/dashboard"), 1000);
     } catch (error) {
       console.error("GitHub Authentication Error:", error);
 
@@ -255,7 +255,7 @@ function Signup() {
         errorMsg = "An account already exists with this email. Please sign in using your original authentication method.";
         setMessage(errorMsg);
         setTimeout(() => {
-          navigate("/login", { state: { message: errorMsg } });
+          navigate("/auth/login", { state: { message: errorMsg } });
         }, 2000);
         return;
       }
@@ -270,7 +270,7 @@ function Signup() {
       <main className="auth-card">
         <div className="auth-card-top">
           <span className="auth-brand-label">Sign Up</span>
-          <Link to="/login" className="auth-switch-link">
+          <Link to="/auth/login" className="auth-switch-link">
             Already registered?
           </Link>
         </div>
@@ -484,7 +484,7 @@ function Signup() {
 
         <div className="auth-footer">
           <p>
-            Already have an account? <Link to="/login">Sign in</Link>
+            Already have an account? <Link to="/auth/login">Sign in</Link>
           </p>
         </div>
       </main>

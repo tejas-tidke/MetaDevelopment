@@ -7,7 +7,7 @@ function WorkspaceHeader({
   actions,
   showBack = true,
   showHome = true,
-  backFallback = "/welcome",
+  backFallback = "/app/dashboard",
 }) {
   const navigate = useNavigate();
 
@@ -20,7 +20,7 @@ function WorkspaceHeader({
   };
 
   const goHome = () => {
-    navigate("/welcome");
+    navigate("/app/dashboard");
   };
 
   return (

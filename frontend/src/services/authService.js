@@ -64,7 +64,7 @@ export const logout = async () => {
     clearUserData();
     
     // Redirect to login page
-    window.location.href = "/login";
+    window.location.href = "/auth/login";
   }
 };
 
@@ -168,7 +168,7 @@ export const deleteAccount = async (password) => {
 
 // Listen for auth state changes
 export const initAuthListener = () => {
-  onAuthStateChanged(auth, (user) => {
+  return onAuthStateChanged(auth, (user) => {
     if (user) {
       // User is signed in
       saveUserData(user);
@@ -177,9 +177,9 @@ export const initAuthListener = () => {
       clearUserData();
       // Redirect to login if on a protected page
       const currentPath = window.location.pathname;
-      const isProtectedRoute = !['/login', '/signup', '/'].includes(currentPath);
+      const isProtectedRoute = !["/auth/login", "/auth/signup", "/login", "/signup", "/"].includes(currentPath);
       if (isProtectedRoute) {
-        window.location.replace('/login');
+        window.location.replace("/auth/login");
       }
     }
   });
@@ -200,10 +200,10 @@ export const checkAuthAndRedirect = () => {
   const unsubscribe = onAuthStateChanged(auth, (user) => {
     const isAuthenticated = !!user;
     const currentPath = window.location.pathname;
-    const isProtectedRoute = !['/login', '/signup', '/'].includes(currentPath);
+    const isProtectedRoute = !["/auth/login", "/auth/signup", "/login", "/signup", "/"].includes(currentPath);
     
     if (!isAuthenticated && isProtectedRoute) {
-      window.location.replace('/login');
+      window.location.replace("/auth/login");
     }
     
     unsubscribe();

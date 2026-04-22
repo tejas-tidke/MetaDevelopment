@@ -44,6 +44,7 @@ function Login() {
   const [isCaptchaVerified, setIsCaptchaVerified] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const redirectPath = location.state?.from || "/app/dashboard";
 
   const isCheckingAuth = useRedirectIfAuthenticated();
 
@@ -51,7 +52,7 @@ function Login() {
     if (location.state && location.state.message) {
       setMessage(location.state.message);
       const timer = setTimeout(() => {
-        window.history.replaceState({}, document.title, "/login");
+        window.history.replaceState({}, document.title, "/auth/login");
       }, 5000);
       return () => clearTimeout(timer);
     }
@@ -100,7 +101,7 @@ function Login() {
       saveUserData(user);
 
       setMessage("Login successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate(redirectPath), 1000);
     } catch (error) {
       console.error("Firebase Login Error:", error);
 
@@ -136,7 +137,7 @@ function Login() {
       saveUserData(user);
 
       setMessage("Google sign-in successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate(redirectPath), 1000);
     } catch (error) {
       console.error("Google Sign-In Error:", error);
       let errorMsg = "Google sign-in failed. Please try again.";
@@ -161,7 +162,7 @@ function Login() {
       saveUserData(user);
 
       setMessage("Microsoft sign-in successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate(redirectPath), 1000);
     } catch (error) {
       console.error("Microsoft Sign-In Error:", error);
       let errorMsg = "Microsoft sign-in failed. Please try again.";
@@ -186,7 +187,7 @@ function Login() {
       saveUserData(user);
 
       setMessage("GitHub sign-in successful!");
-      setTimeout(() => navigate("/welcome"), 1000);
+      setTimeout(() => navigate(redirectPath), 1000);
     } catch (error) {
       console.error("GitHub Sign-In Error:", error);
       let errorMsg = "GitHub sign-in failed. Please try again.";
@@ -243,7 +244,7 @@ function Login() {
       <main className="auth-card">
         <div className="auth-card-top">
           <span className="auth-brand-label">Sign In</span>
-          <Link to="/signup" className="auth-switch-link">
+          <Link to="/auth/signup" className="auth-switch-link">
             Create account
           </Link>
         </div>
@@ -353,7 +354,7 @@ function Login() {
 
         <div className="auth-footer">
           <p>
-            New here? <Link to="/signup">Create your account</Link>
+            New here? <Link to="/auth/signup">Create your account</Link>
           </p>
           
         </div>

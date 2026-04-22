@@ -1,150 +1,125 @@
-import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, useLocation, Navigate } from "react-router-dom";
-import Login from './components/Login';
-import Signup from './components/Signup';
-import Welcome from './components/Welcome';
-import Templates from './components/Templates';
-import Conversations from './components/Conversations';
-import ExistingList from './components/ExistingList';
-import FileUpload from './components/FileUpload';
-import UserProfile from './components/UserProfile';
-import UploadedData from './components/UploadedData';
-import UploadedDataSelect from './components/UploadedDataSelect';
-import ProtectedRoute from './components/ProtectedRoute';
-import { initAuthListener } from './services/authService';
-import { auth } from './firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import React from "react";
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import Login from "./components/Login";
+import Signup from "./components/Signup";
+import RequireAuth from "./components/RequireAuth";
+import PublicOnlyRoute from "./components/PublicOnlyRoute";
+import AppShell from "./components/layout/AppShell";
+import { AuthProvider } from "./context/AuthContext";
+import { CampaignDraftProvider } from "./context/CampaignDraftContext";
+import DashboardPage from "./pages/dashboard/DashboardPage";
+import CampaignsPage from "./pages/campaigns/CampaignsPage";
+import CampaignDetailsStepPage from "./pages/campaigns/CampaignDetailsStepPage";
+import CampaignAudienceStepPage from "./pages/campaigns/CampaignAudienceStepPage";
+import CampaignTemplateStepPage from "./pages/campaigns/CampaignTemplateStepPage";
+import CampaignReviewStepPage from "./pages/campaigns/CampaignReviewStepPage";
+import CampaignDetailPage from "./pages/campaigns/CampaignDetailPage";
+import ContactsPage from "./pages/contacts/ContactsPage";
+import ContactImportPage from "./pages/contacts/ContactImportPage";
+import ImportDetailPage from "./pages/contacts/ImportDetailPage";
+import TemplatesPage from "./pages/templates/TemplatesPage";
+import ConversationsPage from "./pages/conversations/ConversationsPage";
+import SettingsProfilePage from "./pages/settings/SettingsProfilePage";
 import "./App.css";
 import "./styles/auth.css";
 import "./styles/workspace.css";
+import "./styles/app-shell.css";
+
+function LegacyRedirect({ to, includeState = true }) {
+  const location = useLocation();
+  return <Navigate to={to} replace state={includeState ? location.state : undefined} />;
+}
+
+function LegacyUploadedDataRedirect() {
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  const state = location.state || {};
+  const fileId = state.fileId || query.get("fileId");
+
+  if (!fileId) {
+    return <Navigate to="/app/contacts" replace />;
+  }
+
+  const params = new URLSearchParams();
+  if (state.processedRecords != null) params.set("processed", String(state.processedRecords));
+  if (state.errorRecords != null) params.set("errors", String(state.errorRecords));
+
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return <Navigate to={`/app/contacts/imports/${fileId}${suffix}`} replace />;
+}
+
+function ProtectedShellRoutes() {
+  return (
+    <RequireAuth>
+      <AppShell />
+    </RequireAuth>
+  );
+}
 
 function AppRoutes() {
-  const location = useLocation();
-
   return (
-    <div className="app-route-full">
-      <div
-        key={`${location.pathname}${location.search}${location.hash}`}
-        className="route-transition-stage"
-      >
-        <Routes location={location}>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/" element={<Login />} />
-          <Route
-            path="/welcome"
-            element={
-              <ProtectedRoute>
-                <Welcome />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/templates"
-            element={
-              <ProtectedRoute>
-                <Templates />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/flows"
-            element={
-              <ProtectedRoute>
-                <Navigate to="/templates" replace />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/conversations"
-            element={
-              <ProtectedRoute>
-                <Conversations />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/existing-list"
-            element={
-              <ProtectedRoute>
-                <ExistingList />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/file-upload"
-            element={
-              <ProtectedRoute>
-                <FileUpload />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute>
-                <UserProfile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/uploaded-data"
-            element={
-              <ProtectedRoute>
-                <UploadedData />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/uploaded-data-select"
-            element={
-              <ProtectedRoute>
-                <UploadedDataSelect />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/" element={<Navigate to="/auth/login" replace />} />
+
+      <Route element={<PublicOnlyRoute />}>
+        <Route path="/auth/login" element={<Login />} />
+        <Route path="/auth/signup" element={<Signup />} />
+      </Route>
+
+      <Route path="/app" element={<ProtectedShellRoutes />}>
+        <Route index element={<Navigate to="/app/dashboard" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
+
+        <Route path="campaigns">
+          <Route index element={<CampaignsPage />} />
+          <Route path="new/details" element={<CampaignDetailsStepPage />} />
+          <Route path="new/audience" element={<CampaignAudienceStepPage />} />
+          <Route path="new/template" element={<CampaignTemplateStepPage />} />
+          <Route path="new/review" element={<CampaignReviewStepPage />} />
+          <Route path=":campaignId" element={<CampaignDetailPage />} />
+        </Route>
+
+        <Route path="contacts">
+          <Route index element={<ContactsPage />} />
+          <Route path="import" element={<ContactImportPage />} />
+          <Route path="imports/:fileId" element={<ImportDetailPage />} />
+        </Route>
+
+        <Route path="templates" element={<TemplatesPage />} />
+        <Route path="conversations" element={<ConversationsPage />} />
+        <Route path="settings/profile" element={<SettingsProfilePage />} />
+      </Route>
+
+      <Route element={<RequireAuth />}>
+        <Route path="/welcome" element={<Navigate to="/app/dashboard" replace />} />
+        <Route path="/templates" element={<LegacyRedirect to="/app/templates" />} />
+        <Route path="/flows" element={<LegacyRedirect to="/app/campaigns" />} />
+        <Route path="/conversations" element={<LegacyRedirect to="/app/conversations" />} />
+        <Route path="/existing-list" element={<LegacyRedirect to="/app/contacts" />} />
+        <Route path="/file-upload" element={<LegacyRedirect to="/app/contacts/import" />} />
+        <Route path="/profile" element={<LegacyRedirect to="/app/settings/profile" />} />
+        <Route path="/uploaded-data" element={<LegacyUploadedDataRedirect />} />
+        <Route path="/uploaded-data-select" element={<LegacyUploadedDataRedirect />} />
+      </Route>
+
+      <Route path="/login" element={<Navigate to="/auth/login" replace />} />
+      <Route path="/signup" element={<Navigate to="/auth/signup" replace />} />
+      <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
+    </Routes>
   );
 }
 
 function App() {
-  useEffect(() => {
-    // Initialize Firebase auth listener
-    initAuthListener();
-    
-    // Handle browser navigation events
-    const handlePopState = () => {
-      // Check authentication state when user navigates with browser buttons
-      onAuthStateChanged(auth, (user) => {
-        const isAuthenticated = !!user;
-        const currentPath = window.location.pathname;
-        const isProtectedRoute = !['/login', '/signup', '/'].includes(currentPath);
-        
-        // If user is not authenticated and trying to access a protected route
-        if (!isAuthenticated && isProtectedRoute) {
-          // Redirect to login and replace history to prevent back navigation
-          window.location.replace('/login');
-        }
-      });
-    };
-    
-    // Add event listener for browser navigation (back/forward buttons)
-    window.addEventListener('popstate', handlePopState);
-    
-    // Cleanup event listener
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, []);
-
   return (
-    <Router>
-      <div className="App">
-        <AppRoutes />
-      </div>
-    </Router>
+    <AuthProvider>
+      <CampaignDraftProvider>
+        <Router>
+          <div className="App">
+            <AppRoutes />
+          </div>
+        </Router>
+      </CampaignDraftProvider>
+    </AuthProvider>
   );
 }
 

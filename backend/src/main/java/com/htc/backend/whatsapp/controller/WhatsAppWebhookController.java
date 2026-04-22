@@ -3,6 +3,7 @@ package com.htc.backend.whatsapp.controller;
 import com.htc.backend.whatsapp.model.inbound.IncomingMessage;
 import com.htc.backend.whatsapp.model.inbound.IncomingMessageType;
 import com.htc.backend.whatsapp.service.engine.WhatsAppFlowEngineService;
+import com.htc.backend.whatsapp.service.engine.WhatsAppPhoneNumberUtil;
 import com.htc.backend.whatsapp.service.engine.WhatsAppFlowResponseCaptureService;
 import com.htc.backend.whatsapp.service.logging.WhatsAppEventLogService;
 import com.htc.backend.whatsapp.service.parsing.WhatsAppWebhookParser;
@@ -87,10 +88,11 @@ public class WhatsAppWebhookController {
             String recipient = statusEvent.get("recipient_id") != null
                 ? String.valueOf(statusEvent.get("recipient_id"))
                 : null;
+            String normalizedRecipient = recipient == null ? null : WhatsAppPhoneNumberUtil.normalize(recipient);
             String messageId = statusEvent.get("id") != null
                 ? String.valueOf(statusEvent.get("id"))
                 : null;
-            eventLogService.logIncomingEvent("message_status", recipient, null, null, messageId, statusEvent);
+            eventLogService.logIncomingEvent("message_status", normalizedRecipient, null, null, messageId, statusEvent);
         }
 
         Map<String, Object> response = new LinkedHashMap<>();
