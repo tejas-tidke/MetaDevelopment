@@ -118,7 +118,7 @@ function CampaignAudienceStepPage() {
       setUploadStatus({ tone: "info", text: "Uploading audience file..." });
 
       const response = await api.post("/upload", formData, {
-        params: { keepDuplicates: false },
+        params: { keepDuplicates: true },
         headers: { "Content-Type": "multipart/form-data" },
       });
 

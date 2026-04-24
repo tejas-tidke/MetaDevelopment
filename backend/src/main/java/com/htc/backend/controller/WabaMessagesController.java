@@ -1,5 +1,7 @@
 package com.htc.backend.controller;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.htc.backend.dto.SendTemplateRequest;
 import com.htc.backend.entity.UserDetails;
 import com.htc.backend.repository.UserDetailsRepository;
@@ -52,8 +54,12 @@ public class WabaMessagesController {
     }
 
     @PostMapping("/send-template")
-    public Map<String, Object> sendTemplate(@RequestBody SendTemplateRequest req) {
+    public Map<String, Object> sendTemplate(
+            @RequestBody SendTemplateRequest req,
+            @RequestHeader(value = "X-User-Uid", required = false) String ownerUserIdHeader
+    ) {
         Map<String, Object> resp = new HashMap<>();
+        String ownerUserId = normalizeOwnerUserId(ownerUserIdHeader);
         System.out.println("Received send template request: " + req.templateName); // Log the template name
         System.out.println("Request details: " + req); // Log the full request
         System.out.println("Parameters: " + req.parameters); // Log parameters specifically
@@ -79,6 +85,12 @@ public class WabaMessagesController {
             resp.put("message", "Invalid payload: templateName and language are required.");
             return resp;
         }
+
+        if (Boolean.TRUE.equals(req.personalizeWithUserData) && ownerUserId.isBlank()) {
+            resp.put("status", "error");
+            resp.put("message", "Missing authenticated user context for personalization.");
+            return resp;
+        }
         
         // Verify template exists (optional check)
         if (!verifyTemplateExists(req.templateName, req.language)) {
@@ -101,7 +113,7 @@ public class WabaMessagesController {
         // For very large batches (over 1000), process in smaller chunks to avoid memory issues
         if (recipients.size() > 1000) {
             System.out.println("Processing large batch in chunks to manage memory usage...");
-            return processLargeBatchInChunks(req, recipients);
+            return processLargeBatchInChunks(req, recipients, ownerUserId);
         }
 
         String url = String.format("https://graph.facebook.com/%s/%s/messages", apiVersion, phoneNumberId);
@@ -340,7 +352,7 @@ public class WabaMessagesController {
                 System.out.println("Phone number for lookup: " + to);
                 
                 // Try to find user by phone number
-                Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(to);
+                Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(to, ownerUserId);
                 if (userDetailsOpt.isPresent()) {
                     UserDetails userDetails = userDetailsOpt.get();
                     System.out.println("Found user for personalization: " + userDetails.getName());
@@ -486,12 +498,17 @@ public class WabaMessagesController {
             } catch (HttpClientErrorException e) {
                 Map<String, Object> error = new HashMap<>();
                 error.put("to", to);
-                error.put("error", "HTTP error sending message: " + e.getMessage() + " (Status: " + e.getStatusCode() + ")");
+                String userFriendlyError = buildWhatsAppHttpErrorMessage(e);
+                error.put("error", userFriendlyError);
                 error.put("errorCode", "HTTP_ERROR");
                 error.put("statusCode", e.getStatusCode().value());
+                Integer metaCode = extractMetaErrorCode(e.getResponseBodyAsString());
+                if (metaCode != null) {
+                    error.put("metaCode", metaCode);
+                }
                 errors.add(error);
                 recipientResults.add(buildRecipientResult(to, "failed", null, String.valueOf(error.get("error"))));
-                System.err.println("HTTP error sending to " + to + ": " + e.getMessage());
+                System.err.println("HTTP error sending to " + to + ": " + userFriendlyError);
                 
                 // Log response body if available
                 if (e.getResponseBodyAsString() != null && !e.getResponseBodyAsString().isEmpty()) {
@@ -1441,7 +1458,11 @@ public class WabaMessagesController {
     }
     
     // Helper method to process large batches in smaller chunks
-    private Map<String, Object> processLargeBatchInChunks(SendTemplateRequest originalRequest, List<String> allRecipients) {
+    private Map<String, Object> processLargeBatchInChunks(
+            SendTemplateRequest originalRequest,
+            List<String> allRecipients,
+            String ownerUserId
+    ) {
         Map<String, Object> finalResult = new HashMap<>();
         int totalSent = 0;
         int totalFailed = 0;
@@ -1477,7 +1498,7 @@ public class WabaMessagesController {
             chunkRequest.headerMediaFilename = originalRequest.headerMediaFilename;
             
             // Process this chunk
-            Map<String, Object> chunkResult = sendTemplateChunk(chunkRequest);
+            Map<String, Object> chunkResult = sendTemplateChunk(chunkRequest, ownerUserId);
             
             // Aggregate results
             Integer chunkSent = (Integer) chunkResult.get("sent");
@@ -1544,7 +1565,7 @@ public class WabaMessagesController {
     }
     
     // Helper method to send a chunk of messages
-    private Map<String, Object> sendTemplateChunk(SendTemplateRequest req) {
+    private Map<String, Object> sendTemplateChunk(SendTemplateRequest req, String ownerUserId) {
         // This is a simplified version of the main sendTemplate logic for chunks
         // We'll reuse the existing logic but with some modifications for chunked processing
         
@@ -1667,7 +1688,7 @@ public class WabaMessagesController {
             appendButtonComponents(components, req.buttonParameters);
 
             if (Boolean.TRUE.equals(req.personalizeWithUserData)) {
-                Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(to);
+                Optional<UserDetails> userDetailsOpt = findUserByPhoneNumberWithNormalization(to, ownerUserId);
                 userDetailsOpt.ifPresent(userDetails ->
                     replacePlaceholdersInAllParameters(components, bodyParams, userDetails)
                 );
@@ -1705,6 +1726,19 @@ public class WabaMessagesController {
                     recipientResults.add(buildRecipientResult(to, "failed", null, errorMsg));
                     System.err.println("Error sending to " + to + ": " + errorMsg);
                 }
+            } catch (HttpClientErrorException e) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("to", to);
+                error.put("error", buildWhatsAppHttpErrorMessage(e));
+                error.put("errorCode", "HTTP_ERROR");
+                error.put("statusCode", e.getStatusCode().value());
+                Integer metaCode = extractMetaErrorCode(e.getResponseBodyAsString());
+                if (metaCode != null) {
+                    error.put("metaCode", metaCode);
+                }
+                errors.add(error);
+                recipientResults.add(buildRecipientResult(to, "failed", null, String.valueOf(error.get("error"))));
+                System.err.println("HTTP error sending to " + to + ": " + error.get("error"));
             } catch (Exception e) {
                 Map<String, Object> error = new HashMap<>();
                 error.put("to", to);
@@ -1723,6 +1757,58 @@ public class WabaMessagesController {
         result.put("recipientResults", recipientResults);
         
         return result;
+    }
+
+    private String buildWhatsAppHttpErrorMessage(HttpClientErrorException e) {
+        String fallback = "HTTP error sending message: " + e.getMessage() + " (Status: " + e.getStatusCode() + ")";
+        String responseBody = e.getResponseBodyAsString();
+        if (responseBody == null || responseBody.isBlank()) {
+            return fallback;
+        }
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(responseBody);
+            JsonNode errorNode = root.path("error");
+            int code = errorNode.path("code").asInt(-1);
+            String message = errorNode.path("message").asText("");
+            String details = errorNode.path("error_data").path("details").asText("");
+
+            if (code == 138000) {
+                return "WhatsApp Calling is not enabled for this business phone number (code 138000). " +
+                    "The selected template likely includes a VOICE_CALL/calling action. " +
+                    "Use a non-calling template or enable Calling API for this number in WhatsApp Manager.";
+            }
+            if (code == 138013) {
+                return "Business-initiated calling is not available for this account/phone number (code 138013). " +
+                    "Use a non-calling template or verify Calling API eligibility for this number and country.";
+            }
+
+            if (message != null && !message.isBlank()) {
+                if (details != null && !details.isBlank()) {
+                    return "WhatsApp API error " + code + ": " + message + " | " + details;
+                }
+                return "WhatsApp API error " + code + ": " + message;
+            }
+        } catch (Exception ignored) {
+            // Fall back to generic error when parsing fails.
+        }
+
+        return fallback;
+    }
+
+    private Integer extractMetaErrorCode(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return null;
+        }
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(responseBody);
+            int code = root.path("error").path("code").asInt(Integer.MIN_VALUE);
+            return code == Integer.MIN_VALUE ? null : code;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     private TemplateVariableSpec fetchTemplateVariableSpec(String templateName, String language) {
@@ -1848,15 +1934,33 @@ public class WabaMessagesController {
 
     // Helper method to find a user by phone number, handling cases where multiple users have the same phone number
     private Optional<UserDetails> findUserByPhoneNumber(String phoneNumber) {
+        return findUserByPhoneNumber(phoneNumber, null);
+    }
+
+    // Helper method to find a user by phone number, scoped to the authenticated owner when provided
+    private Optional<UserDetails> findUserByPhoneNumber(String phoneNumber, String ownerUserIdHeader) {
+        String ownerUserId = normalizeOwnerUserId(ownerUserIdHeader);
+
+        if (!ownerUserId.isBlank()) {
+            try {
+                return userDetailsRepository.findFirstByPhoneNoAndOwnerUserId(phoneNumber, ownerUserId);
+            } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
+                System.out.println("Multiple users found for phone number: " + phoneNumber + ". Using the first owner-scoped match.");
+                List<UserDetails> usersWithSamePhone = userDetailsRepository.findAllByPhoneNoAndOwnerUserId(phoneNumber, ownerUserId);
+                if (!usersWithSamePhone.isEmpty()) {
+                    return Optional.of(usersWithSamePhone.get(0));
+                }
+                return Optional.empty();
+            }
+        }
+
         try {
-            // First try the unique lookup
             return userDetailsRepository.findByPhoneNo(phoneNumber);
         } catch (org.springframework.dao.IncorrectResultSizeDataAccessException e) {
-            // Handle case where multiple users have the same phone number
             System.out.println("Multiple users found for phone number: " + phoneNumber + ". Using the first one.");
             List<UserDetails> usersWithSamePhone = userDetailsRepository.findAllByPhoneNo(phoneNumber);
             if (!usersWithSamePhone.isEmpty()) {
-                return Optional.of(usersWithSamePhone.get(0)); // Use the first one
+                return Optional.of(usersWithSamePhone.get(0));
             }
             return Optional.empty();
         }
@@ -1864,19 +1968,26 @@ public class WabaMessagesController {
 
     // Helper method to find a user by phone number with normalization, handling cases where multiple users have the same phone number
     private Optional<UserDetails> findUserByPhoneNumberWithNormalization(String phoneNumber) {
-        // Try exact match first
-        Optional<UserDetails> user = findUserByPhoneNumber(phoneNumber);
+        return findUserByPhoneNumberWithNormalization(phoneNumber, null);
+    }
+
+    // Helper method to find a user by phone number with normalization, scoped by owner when provided
+    private Optional<UserDetails> findUserByPhoneNumberWithNormalization(String phoneNumber, String ownerUserId) {
+        Optional<UserDetails> user = findUserByPhoneNumber(phoneNumber, ownerUserId);
         if (user.isPresent()) {
             return user;
         }
-        
-        // Try normalized match
+
         String normalized = normalizePhoneNumber(phoneNumber);
         if (!normalized.equals(phoneNumber)) {
-            return findUserByPhoneNumber(normalized);
+            return findUserByPhoneNumber(normalized, ownerUserId);
         }
-        
+
         return Optional.empty();
+    }
+
+    private String normalizeOwnerUserId(String ownerUserIdHeader) {
+        return ownerUserIdHeader == null ? "" : ownerUserIdHeader.trim();
     }
     
     // Helper method to calculate delay with exponential backoff for rate limiting

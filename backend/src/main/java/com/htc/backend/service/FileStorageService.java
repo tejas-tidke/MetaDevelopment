@@ -156,13 +156,17 @@ public class FileStorageService {
     }
 
     @Transactional
-    public UploadedFile processFile(MultipartFile file) throws IOException {
-        return processFile(file, false);
+    public UploadedFile processFile(MultipartFile file, String ownerUserId) throws IOException {
+        return processFile(file, false, ownerUserId);
     }
 
     @Transactional
-    public UploadedFile processFile(MultipartFile file, boolean keepDuplicates) throws IOException {
+    public UploadedFile processFile(MultipartFile file, boolean keepDuplicates, String ownerUserId) throws IOException {
         validateFile(file);
+        String normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
+        if (normalizedOwnerUserId.isEmpty()) {
+            throw new IllegalArgumentException("Missing authenticated user context.");
+        }
 
         UploadedFile uploadedFile = new UploadedFile();
         uploadedFile.setFileName(Objects.requireNonNull(file.getOriginalFilename()));
@@ -170,16 +174,17 @@ public class FileStorageService {
         uploadedFile.setSize(file.getSize());
         uploadedFile.setUploadedAt(LocalDateTime.now());
         uploadedFile.setStatus("PENDING");
+        uploadedFile.setOwnerUserId(normalizedOwnerUserId);
 
         try {
             uploadedFile = uploadedFileRepository.save(uploadedFile);
 
             ProcessingSummary summary;
             if (file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase().endsWith(".csv")) {
-                summary = processCSVFile(file, uploadedFile, keepDuplicates);
+                summary = processCSVFile(file, uploadedFile, keepDuplicates, normalizedOwnerUserId);
             } else if (file.getOriginalFilename() != null &&
                     file.getOriginalFilename().toLowerCase().matches(".*\\.(xls|xlsx)$")) {
-                summary = processExcelFile(file, uploadedFile, keepDuplicates);
+                summary = processExcelFile(file, uploadedFile, keepDuplicates, normalizedOwnerUserId);
             } else {
                 throw new IllegalArgumentException("Unsupported file type");
             }
@@ -197,8 +202,12 @@ public class FileStorageService {
         return uploadedFileRepository.save(uploadedFile);
     }
 
-    public DuplicateCheckResult checkDuplicates(MultipartFile file) throws IOException {
+    public DuplicateCheckResult checkDuplicates(MultipartFile file, String ownerUserId) throws IOException {
         validateFile(file);
+        String normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
+        if (normalizedOwnerUserId.isEmpty()) {
+            throw new IllegalArgumentException("Missing authenticated user context.");
+        }
 
         ProcessingSummary summary;
         List<ParsedUserRow> parsedRows = new ArrayList<>();
@@ -216,7 +225,7 @@ public class FileStorageService {
                 .map(parsedRow -> parsedRow.userDetails.getEmail())
                 .collect(Collectors.toSet());
 
-        Set<String> existingEmails = userDetailsRepository.findAllByEmailIn(candidateEmails).stream()
+        Set<String> existingEmails = userDetailsRepository.findAllByEmailInAndOwnerUserId(candidateEmails, normalizedOwnerUserId).stream()
                 .map(existingUser -> normalizeEmail(existingUser.getEmail()))
                 .collect(Collectors.toSet());
 
@@ -261,7 +270,12 @@ public class FileStorageService {
         }
     }
 
-    private ProcessingSummary processCSVFile(MultipartFile file, UploadedFile uploadedFile, boolean keepDuplicates) throws IOException {
+    private ProcessingSummary processCSVFile(
+            MultipartFile file,
+            UploadedFile uploadedFile,
+            boolean keepDuplicates,
+            String ownerUserId
+    ) throws IOException {
         List<ParsedUserRow> parsedRows = new ArrayList<>();
         Set<String> seenEmailsInFile = new HashSet<>();
         ProcessingSummary summary = new ProcessingSummary();
@@ -307,6 +321,7 @@ public class FileStorageService {
                     userDetails.setPhoneNo(phoneNo);
                     userDetails.setCompanyName(companyName);
                     userDetails.setUploadedFileId(uploadedFile.getId());
+                    userDetails.setOwnerUserId(ownerUserId);
                     parsedRows.add(new ParsedUserRow(userDetails, rowNumber));
                 } catch (Exception e) {
                     summary.addValidationError(rowNumber, "Invalid row data: " + safeErrorMessage(e.getMessage()));
@@ -314,7 +329,7 @@ public class FileStorageService {
             }
         }
 
-        persistParsedRows(parsedRows, summary, keepDuplicates);
+        persistParsedRows(parsedRows, summary, keepDuplicates, ownerUserId);
         return summary;
     }
 
@@ -326,7 +341,12 @@ public class FileStorageService {
         }
     }
 
-    private ProcessingSummary processExcelFile(MultipartFile file, UploadedFile uploadedFile, boolean keepDuplicates) throws IOException {
+    private ProcessingSummary processExcelFile(
+            MultipartFile file,
+            UploadedFile uploadedFile,
+            boolean keepDuplicates,
+            String ownerUserId
+    ) throws IOException {
         List<ParsedUserRow> parsedRows = new ArrayList<>();
         Set<String> seenEmailsInFile = new HashSet<>();
         ProcessingSummary summary = new ProcessingSummary();
@@ -373,6 +393,7 @@ public class FileStorageService {
                     userDetails.setPhoneNo(phoneNo);
                     userDetails.setCompanyName(companyName);
                     userDetails.setUploadedFileId(uploadedFile.getId());
+                    userDetails.setOwnerUserId(ownerUserId);
                     parsedRows.add(new ParsedUserRow(userDetails, rowNumber));
                 } catch (Exception e) {
                     summary.addValidationError(rowNumber, "Invalid row data: " + safeErrorMessage(e.getMessage()));
@@ -380,11 +401,16 @@ public class FileStorageService {
             }
         }
 
-        persistParsedRows(parsedRows, summary, keepDuplicates);
+        persistParsedRows(parsedRows, summary, keepDuplicates, ownerUserId);
         return summary;
     }
 
-    private void persistParsedRows(List<ParsedUserRow> parsedRows, ProcessingSummary summary, boolean keepDuplicates) {
+    private void persistParsedRows(
+            List<ParsedUserRow> parsedRows,
+            ProcessingSummary summary,
+            boolean keepDuplicates,
+            String ownerUserId
+    ) {
         if (parsedRows.isEmpty()) {
             return;
         }
@@ -406,7 +432,8 @@ public class FileStorageService {
                 .map(parsedRow -> parsedRow.userDetails.getEmail())
                 .collect(Collectors.toSet());
 
-        Set<String> existingEmails = userDetailsRepository.findAllByEmailIn(candidateEmails).stream()
+        Set<String> existingEmails = userDetailsRepository
+                .findAllByEmailInAndOwnerUserId(candidateEmails, ownerUserId).stream()
                 .map(existingUser -> normalizeEmail(existingUser.getEmail()))
                 .collect(Collectors.toSet());
 
@@ -653,18 +680,38 @@ public class FileStorageService {
         return value.trim();
     }
 
-    public List<UploadedFile> getAllUploadedFiles() {
-        return uploadedFileRepository.findAllByOrderByUploadedAtDesc();
+    public List<UploadedFile> getAllUploadedFiles(String ownerUserId) {
+        String normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
+        if (normalizedOwnerUserId.isEmpty()) {
+            return List.of();
+        }
+        return uploadedFileRepository.findAllByOwnerUserIdOrderByUploadedAtDesc(normalizedOwnerUserId);
     }
 
-    public List<UserDetails> getUserDetailsByUploadedFileId(Long uploadedFileId) {
+    public List<UserDetails> getUserDetailsByUploadedFileId(Long uploadedFileId, String ownerUserId) {
+        String normalizedOwnerUserId = normalizeOwnerUserId(ownerUserId);
+        if (normalizedOwnerUserId.isEmpty()) {
+            return List.of();
+        }
+
+        boolean fileOwnedByUser = uploadedFileRepository
+                .findByIdAndOwnerUserId(uploadedFileId, normalizedOwnerUserId)
+                .isPresent();
+        if (!fileOwnedByUser) {
+            return List.of();
+        }
+
         System.out.println("Querying user details for uploadedFileId: " + uploadedFileId);
-        List<UserDetails> result = userDetailsRepository.findByUploadedFileId(uploadedFileId);
+        List<UserDetails> result = userDetailsRepository.findByUploadedFileIdAndOwnerUserId(uploadedFileId, normalizedOwnerUserId);
         System.out.println("Found " + result.size() + " user details for uploadedFileId: " + uploadedFileId);
         return result;
     }
 
     public UploadedFile saveUploadedFile(UploadedFile uploadedFile) {
         return uploadedFileRepository.save(uploadedFile);
+    }
+
+    private String normalizeOwnerUserId(String ownerUserId) {
+        return ownerUserId == null ? "" : ownerUserId.trim();
     }
 }

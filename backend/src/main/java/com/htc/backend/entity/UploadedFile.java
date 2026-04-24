@@ -34,6 +34,9 @@ public class UploadedFile {
     @Column(name = "error_records")
     private Integer errorRecords;
 
+    @Column(name = "owner_user_id", length = 128)
+    private String ownerUserId;
+
     @PrePersist
     protected void onCreate() {
         uploadedAt = LocalDateTime.now();
@@ -110,5 +113,13 @@ public class UploadedFile {
     
     public void setErrorRecords(Integer errorRecords) {
         this.errorRecords = errorRecords;
+    }
+
+    public String getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(String ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 }

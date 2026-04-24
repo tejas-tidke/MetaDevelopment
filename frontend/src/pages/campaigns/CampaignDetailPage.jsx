@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import AppAlert from "../../components/ui/AppAlert";
 import EmptyState from "../../components/ui/EmptyState";
 import StatusBadge from "../../components/ui/StatusBadge";
 import api from "../../services/api";
-import { getCampaignById } from "../../services/campaignService";
+import { consumePendingCampaignToast, getCampaignById } from "../../services/campaignService";
 
 const AUDIENCE_MODE_LABEL = {
   all_contacts: "Selected Contacts",
@@ -35,12 +36,34 @@ function formatDateTime(value) {
 
 function CampaignDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { campaignId } = useParams();
 
   const campaign = useMemo(() => getCampaignById(campaignId), [campaignId]);
+  const [campaignToast, setCampaignToast] = useState(null);
+  const [showCampaignToast, setShowCampaignToast] = useState(false);
   const [recipientRows, setRecipientRows] = useState([]);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState("");
+
+  useEffect(() => {
+    const toastFromState = location.state?.campaignToast || null;
+    if (toastFromState) {
+      setCampaignToast(toastFromState);
+      setShowCampaignToast(true);
+      return;
+    }
+
+    const toastFromStorage = consumePendingCampaignToast(campaignId);
+    if (toastFromStorage) {
+      setCampaignToast(toastFromStorage);
+      setShowCampaignToast(true);
+      return;
+    }
+
+    setCampaignToast(null);
+    setShowCampaignToast(false);
+  }, [campaignId, location.state]);
 
   useEffect(() => {
     if (!campaign) {
@@ -84,11 +107,15 @@ function CampaignDetailPage() {
         const mergedRows = rows.map((row) => {
           const normalizedTo = normalizePhone(row?.normalizedTo || row?.to);
           const messageId = (row?.waMessageId || "").toString().trim();
+          const fallbackStatus = normalizeStatus(row?.status);
+
+          // Only trust recipient-level fallback when a row has no message id and is not already failed.
+          // This avoids pulling an old status from a previous campaign/message for the same phone number.
           const liveByMessage = messageId ? byMessageId[messageId] : null;
-          const liveByRecipient = normalizedTo ? byRecipient[normalizedTo] : null;
+          const canUseRecipientFallback = !messageId && fallbackStatus !== "failed";
+          const liveByRecipient = canUseRecipientFallback && normalizedTo ? byRecipient[normalizedTo] : null;
           const live = liveByMessage || liveByRecipient || null;
 
-          const fallbackStatus = normalizeStatus(row?.status);
           const liveStatus = normalizeStatus(live?.status);
           const resolvedStatus = liveStatus !== "unknown" ? liveStatus : fallbackStatus;
 
@@ -171,6 +198,19 @@ function CampaignDetailPage() {
 
   return (
     <div className="app-page">
+      {showCampaignToast && campaignToast && (
+        <AppAlert
+          tone={campaignToast.tone || "success"}
+          title={campaignToast.title || "Campaign Updated"}
+          toastKey={`campaign:${campaignId}:${campaignToast.tone || "info"}:${campaignToast.message || ""}`}
+          duration={5600}
+          className="sm:left-72"
+          onClose={() => setShowCampaignToast(false)}
+        >
+          {campaignToast.message || "Campaign updated successfully."}
+        </AppAlert>
+      )}
+
       <section className="app-section-card">
         <div className="app-section-head">
           <div>

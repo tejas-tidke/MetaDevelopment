@@ -8,7 +8,6 @@ const navigationItems = [
   { label: "Campaigns", to: "/app/campaigns", primary: true },
   { label: "Contacts", to: "/app/contacts" },
   { label: "Templates", to: "/app/templates" },
-  { label: "Conversations", to: "/app/conversations" },
   { label: "Settings", to: "/app/settings/profile" },
 ];
 

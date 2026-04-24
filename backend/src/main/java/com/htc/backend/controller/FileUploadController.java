@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 public class FileUploadController {
 
     private static final Logger log = LoggerFactory.getLogger(FileUploadController.class);
+    private static final String USER_UID_HEADER = "X-User-Uid";
     
     @Autowired
     private FileStorageService fileStorageService;
@@ -71,9 +72,13 @@ public class FileUploadController {
 
     // For user data files (CSV/Excel)
     @PostMapping("/upload/check-duplicates")
-    public ResponseEntity<?> checkDuplicates(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> checkDuplicates(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = USER_UID_HEADER, required = false) String ownerUserIdHeader
+    ) {
         log.info("checkDuplicates endpoint called with file: {}", file != null ? file.getOriginalFilename() : "null");
         try {
+            String ownerUserId = requireOwnerUserId(ownerUserIdHeader);
             if (file == null || file.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
                         "status", "error",
@@ -81,7 +86,7 @@ public class FileUploadController {
                 ));
             }
 
-            FileStorageService.DuplicateCheckResult result = fileStorageService.checkDuplicates(file);
+            FileStorageService.DuplicateCheckResult result = fileStorageService.checkDuplicates(file, ownerUserId);
 
             Map<String, Object> response = new HashMap<>();
             response.put("status", result.getTotalDuplicates() > 0 ? "duplicates_found" : "success");
@@ -94,6 +99,11 @@ public class FileUploadController {
             response.put("totalDuplicates", result.getTotalDuplicates());
             response.put("duplicateDetails", result.getDuplicateDetails());
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
+                    "status", "error",
+                    "message", e.getMessage()
+            ));
         } catch (Exception e) {
             log.error("Error checking duplicates:", e);
             Map<String, Object> errorResponse = new HashMap<>();
@@ -103,14 +113,24 @@ public class FileUploadController {
         }
     }
 
+    private String requireOwnerUserId(String ownerUserIdHeader) {
+        String ownerUserId = ownerUserIdHeader == null ? "" : ownerUserIdHeader.trim();
+        if (ownerUserId.isEmpty()) {
+            throw new IllegalArgumentException("Missing authenticated user context.");
+        }
+        return ownerUserId;
+    }
+
     // For user data files (CSV/Excel)
     @PostMapping("/upload")
     public ResponseEntity<?> uploadFile(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(name = "keepDuplicates", defaultValue = "false") boolean keepDuplicates
+            @RequestParam(name = "keepDuplicates", defaultValue = "false") boolean keepDuplicates,
+            @RequestHeader(value = USER_UID_HEADER, required = false) String ownerUserIdHeader
     ) {
         log.info("uploadFile endpoint called with file: {}", file != null ? file.getOriginalFilename() : "null");
         try {
+            String ownerUserId = requireOwnerUserId(ownerUserIdHeader);
             log.info("=== USER DATA UPLOAD ENDPOINT HIT ===");
             log.info("File received: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
             
@@ -139,7 +159,7 @@ public class FileUploadController {
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
             
             // Process the file and save to database
-            UploadedFile uploadedFile = fileStorageService.processFile(file, keepDuplicates);
+            UploadedFile uploadedFile = fileStorageService.processFile(file, keepDuplicates, ownerUserId);
             log.info("File processed successfully. Uploaded file ID: {}", uploadedFile.getId());
             
             // Prepare response
@@ -169,6 +189,11 @@ public class FileUploadController {
             response.put("file", uploadedFile);
             
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
             
         } catch (Exception e) {
             log.error("Error uploading file:", e);
@@ -181,9 +206,13 @@ public class FileUploadController {
     
     // For template media files (images, videos, documents)
     @PostMapping("/upload/media")
-    public ResponseEntity<?> uploadMediaFile(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadMediaFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = USER_UID_HEADER, required = false) String ownerUserIdHeader
+    ) {
         log.info("uploadMediaFile endpoint called with file: {}", file != null ? file.getOriginalFilename() : "null");
         try {
+            String ownerUserId = requireOwnerUserId(ownerUserIdHeader);
             log.info("=== MEDIA UPLOAD ENDPOINT HIT ===");
             log.info("File received: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
             
@@ -217,6 +246,7 @@ public class FileUploadController {
             uploadedFile.setFileType(file.getContentType() != null ? file.getContentType() : "unknown");
             uploadedFile.setSize(file.getSize());
             uploadedFile.setStatus("PROCESSED"); // Media files don't need processing
+            uploadedFile.setOwnerUserId(ownerUserId);
             
             // Save to database
             uploadedFile = fileStorageService.saveUploadedFile(uploadedFile);
@@ -232,6 +262,11 @@ public class FileUploadController {
             response.put("file", uploadedFile);
             
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
         } catch (HttpClientErrorException e) {
             log.error("WhatsApp media API error:", e);
             Map<String, Object> errorResponse = new HashMap<>();
@@ -287,15 +322,23 @@ public class FileUploadController {
     }
     
     @GetMapping("/files")
-    public ResponseEntity<?> getAllFiles() {
+    public ResponseEntity<?> getAllFiles(
+            @RequestHeader(value = USER_UID_HEADER, required = false) String ownerUserIdHeader
+    ) {
         log.info("getAllFiles endpoint called");
         try {
-            List<UploadedFile> files = fileStorageService.getAllUploadedFiles();
+            String ownerUserId = requireOwnerUserId(ownerUserIdHeader);
+            List<UploadedFile> files = fileStorageService.getAllUploadedFiles(ownerUserId);
             log.info("Retrieved {} uploaded files", files.size());
             Map<String, Object> response = new HashMap<>();
             response.put("status", "success");
             response.put("data", files);
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
         } catch (Exception e) {
             log.error("Error fetching files:", e);
             Map<String, Object> errorResponse = new HashMap<>();
@@ -306,10 +349,14 @@ public class FileUploadController {
     }
     
     @GetMapping("/files/{fileId}/user-details")
-    public ResponseEntity<?> getUserDetailsByFileId(@PathVariable Long fileId) {
+    public ResponseEntity<?> getUserDetailsByFileId(
+            @PathVariable Long fileId,
+            @RequestHeader(value = USER_UID_HEADER, required = false) String ownerUserIdHeader
+    ) {
         log.info("getUserDetailsByFileId endpoint called with fileId: {}", fileId);
         try {
-            List<UserDetails> userDetails = fileStorageService.getUserDetailsByUploadedFileId(fileId);
+            String ownerUserId = requireOwnerUserId(ownerUserIdHeader);
+            List<UserDetails> userDetails = fileStorageService.getUserDetailsByUploadedFileId(fileId, ownerUserId);
             log.info("Found {} user details for file ID: {}", userDetails.size(), fileId);
             log.debug("User details: {}", userDetails);
             
@@ -317,6 +364,11 @@ public class FileUploadController {
             response.put("status", "success");
             response.put("data", userDetails);
             return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("status", "error");
+            errorResponse.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
         } catch (Exception e) {
             log.error("Error fetching user details for file ID {}: {}", fileId, e.getMessage(), e);
             Map<String, Object> errorResponse = new HashMap<>();

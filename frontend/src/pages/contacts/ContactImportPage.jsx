@@ -9,14 +9,15 @@ function ContactImportPage() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState("info");
-  const [duplicateInfo, setDuplicateInfo] = useState(null);
 
-  const uploadWithPreference = async (keepDuplicates) => {
+  const uploadWithPreference = async (keepDuplicates = true) => {
     if (!file) return;
     const formData = new FormData();
     formData.append("file", file);
 
     setUploading(true);
+    setMessage("Uploading file...");
+    setTone("info");
     try {
       const response = await api.post("/upload", formData, {
         params: { keepDuplicates },
@@ -38,42 +39,16 @@ function ContactImportPage() {
       setTone("error");
     } finally {
       setUploading(false);
-      setDuplicateInfo(null);
     }
   };
 
-  const checkDuplicatesAndUpload = async () => {
+  const handleUpload = async () => {
     if (!file) {
       setMessage("Select a CSV or Excel file first.");
       setTone("error");
       return;
     }
-    const formData = new FormData();
-    formData.append("file", file);
-
-    setUploading(true);
-    setMessage("Checking duplicates...");
-    setTone("info");
-    try {
-      const duplicateCheck = await api.post("/upload/check-duplicates", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const total = Number(duplicateCheck?.data?.totalDuplicates || 0);
-      if (duplicateCheck?.data?.status === "duplicates_found" && total > 0) {
-        setDuplicateInfo(duplicateCheck.data);
-        setMessage(`Found ${total} duplicate contacts in this file.`);
-        setTone("warning");
-        return;
-      }
-      await uploadWithPreference(false);
-    } catch (error) {
-      console.error("Duplicate check failed", error);
-      setMessage(error?.response?.data?.message || "Could not validate duplicates.");
-      setTone("error");
-    } finally {
-      setUploading(false);
-    }
+    await uploadWithPreference(true);
   };
 
   return (
@@ -104,25 +79,11 @@ function ContactImportPage() {
             </div>
           )}
 
-          {duplicateInfo && (
-            <div className="app-empty" style={{ marginTop: "0.85rem", textAlign: "left" }}>
-              Duplicate contacts found: {duplicateInfo.totalDuplicates}
-              <div style={{ marginTop: "0.55rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button type="button" className="app-btn-secondary" onClick={() => uploadWithPreference(false)}>
-                  Skip Duplicates
-                </button>
-                <button type="button" className="app-btn-primary" onClick={() => uploadWithPreference(true)}>
-                  Keep Duplicates
-                </button>
-              </div>
-            </div>
-          )}
-
           <div className="app-inline-actions">
             <button type="button" className="app-btn-secondary" onClick={() => navigate("/app/contacts")}>
               Back to Contacts
             </button>
-            <button type="button" className="app-btn-primary" onClick={checkDuplicatesAndUpload} disabled={uploading}>
+            <button type="button" className="app-btn-primary" onClick={handleUpload} disabled={uploading}>
               {uploading ? "Processing..." : "Upload File"}
             </button>
           </div>

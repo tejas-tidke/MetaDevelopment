@@ -34,6 +34,9 @@ public class UserDetails {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "owner_user_id", length = 128)
+    private String ownerUserId;
     
     // Reference to the uploaded file
     @Column(name = "uploaded_file_id")
@@ -113,5 +116,13 @@ public class UserDetails {
     
     public void setUploadedFileId(Long uploadedFileId) {
         this.uploadedFileId = uploadedFileId;
+    }
+
+    public String getOwnerUserId() {
+        return ownerUserId;
+    }
+
+    public void setOwnerUserId(String ownerUserId) {
+        this.ownerUserId = ownerUserId;
     }
 }
